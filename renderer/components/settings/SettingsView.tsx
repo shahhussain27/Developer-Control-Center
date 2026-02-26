@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { FolderPlus, Trash2, HardDrive, ShieldCheck, TerminalSquare, Plus } from 'lucide-react'
+import Image from 'next/image'
 
 interface SettingsViewProps {
   settings: Settings
@@ -101,7 +102,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave, on
         <Card className="bg-card/30 border-muted/50 backdrop-blur-xl">
           <CardHeader>
             <CardTitle className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
+              <Image src="/icons/unity.svg" alt="Unity" width={20} height={20} />
               Unity Executable
             </CardTitle>
           </CardHeader>
@@ -128,7 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSave, on
         <Card className="bg-card/30 border-muted/50 backdrop-blur-xl">
           <CardHeader>
             <CardTitle className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500" />
+              <Image src="/icons/unreal.svg" alt="Unreal" width={20} height={20} />
               Unreal (UEEditor.exe)
             </CardTitle>
           </CardHeader>

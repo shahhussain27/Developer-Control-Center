@@ -106,6 +106,30 @@ export interface StartupProfile {
 }
 
 // ---------------------------------------------------------------------------
+// Engine Builds & Cleanup
+// ---------------------------------------------------------------------------
+
+export interface BuildProfile {
+  id: string
+  projectId: string
+  name: string
+  engine: 'unity' | 'unreal'
+  arguments: string[]
+  outputPath: string
+}
+
+export interface EngineDetectionResult {
+  installedVersion?: string
+  requiredVersion?: string
+  isMatch: boolean
+}
+
+export interface CleanupResult {
+  bytesFreed: number
+  foldersDeleted: string[]
+}
+
+// ---------------------------------------------------------------------------
 // Network
 // ---------------------------------------------------------------------------
 
@@ -140,6 +164,17 @@ export interface IpcHandlers {
   'delete-profile': (profileId: string) => Promise<void>
   'run-profile': (profileId: string) => Promise<void>
   'stop-profile': (profileId: string) => Promise<void>
+
+  // Build Profile Handlers
+  'get-build-profiles': (projectId: string) => Promise<BuildProfile[]>
+  'save-build-profile': (profile: BuildProfile) => Promise<void>
+  'delete-build-profile': (profileId: string) => Promise<void>
+  'run-build-profile': (profileId: string) => Promise<void | { error: SpawnError }>
+
+  // Engine Diagnostics & Cleanup
+  'detect-engine-version': (projectId: string) => Promise<EngineDetectionResult>
+  'clean-project': (projectId: string) => Promise<CleanupResult>
+
   // Port Handlers
   'get-active-ports': () => Promise<PortInfo[]>
   'kill-process-by-pid': (pid: number) => Promise<void>

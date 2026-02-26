@@ -14,6 +14,9 @@ import {
   IdeLaunchError,
   QuickAction,
   QuickActionError,
+  BuildProfile,
+  EngineDetectionResult,
+  CleanupResult,
 } from '../common/types'
 
 // ---------------------------------------------------------------------------
@@ -114,6 +117,22 @@ const handler = {
     ipcRenderer.invoke('run-profile', profileId),
   stopProfile: (profileId: string): Promise<void> =>
     ipcRenderer.invoke('stop-profile', profileId),
+
+  // ----- Build Profiles ----------------------------------------------------
+  getBuildProfiles: (projectId: string): Promise<BuildProfile[]> =>
+    ipcRenderer.invoke('get-build-profiles', projectId),
+  saveBuildProfile: (profile: BuildProfile): Promise<void> =>
+    ipcRenderer.invoke('save-build-profile', profile),
+  deleteBuildProfile: (profileId: string): Promise<void> =>
+    ipcRenderer.invoke('delete-build-profile', profileId),
+  runBuildProfile: (profileId: string): Promise<void | { error: SpawnError }> =>
+    ipcRenderer.invoke('run-build-profile', profileId),
+
+  // ----- Engine Diagnostics & Cleanup --------------------------------------
+  detectEngineVersion: (projectId: string): Promise<EngineDetectionResult> =>
+    ipcRenderer.invoke('detect-engine-version', projectId),
+  cleanProject: (projectId: string): Promise<CleanupResult> =>
+    ipcRenderer.invoke('clean-project', projectId),
 
   // ----- Network / Ports ---------------------------------------------------
   getActivePorts: (): Promise<PortInfo[]> =>

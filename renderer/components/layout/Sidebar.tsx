@@ -23,7 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) =
       <div className="p-6">
         <div className="flex items-center gap-3 px-2 mb-2">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
-            <Image src="/images/logo.png" alt="Logo" width={32} height={32} className="drop-shadow-[0_0_8px_rgba(50,205,50,0.5)]" />
+            <Image src="/images/logo.png" priority={true} alt="Logo" width={32} height={32} className="drop-shadow-[0_0_8px_rgba(50,205,50,0.5)]" />
           </div>
           <span className="font-black tracking-tighter text-md uppercase bg-gradient-to-r from-purple-400 to-green-400 bg-clip-text text-transparent drop-shadow-sm">
             Control Center

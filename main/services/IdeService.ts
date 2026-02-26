@@ -5,10 +5,11 @@ import { SettingsService } from './SettingsService'
 export class IdeService {
   private static supportedIdes = [
     { name: 'Visual Studio Code', executables: ['Code.exe', 'Code'] },
-    { name: 'VS Code Insiders', executables: ['Code - Insiders.exe'] },
-    { name: 'WebStorm', executables: ['webstorm64.exe'] },
-    { name: 'IntelliJ IDEA', executables: ['idea64.exe'] },
-    { name: 'PyCharm', executables: ['pycharm64.exe'] }
+    { name: 'VS Code Insiders', executables: ['Code - Insiders.exe', 'code-insiders'] },
+    { name: 'Antigravity', executables: ['Antigravity.exe', 'antigravity'] },
+    { name: 'WebStorm', executables: ['webstorm64.exe', 'webstorm', 'webstorm.sh'] },
+    { name: 'IntelliJ IDEA', executables: ['idea64.exe', 'idea', 'idea.sh'] },
+    { name: 'PyCharm', executables: ['pycharm64.exe', 'pycharm', 'pycharm.sh'] }
   ]
 
   /**

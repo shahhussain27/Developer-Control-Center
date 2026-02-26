@@ -2,11 +2,13 @@ import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { Folder, Activity, Play, Square, ExternalLink, RefreshCw, Code, AlertCircle, Code2, Globe, Box, TerminalSquare, AppWindow, MoreVertical, Terminal, Copy, Globe as GlobeIcon, FileText, AlertTriangle, FolderOpen } from 'lucide-react'
+import { Folder, Activity, Play, Square, ExternalLink, RefreshCw, Code, AlertCircle, Code2, Globe, Box, TerminalSquare, AppWindow, MoreVertical, Terminal, Copy, Globe as GlobeIcon, FileText, AlertTriangle, FolderOpen, Trash2 } from 'lucide-react'
 import { Project, ProcessState, IdeInfo, QuickAction } from '../../../common/types'
 import { DEFAULT_ACTIONS_BY_PROJECT_TYPE } from '../../lib/constants'
 import { cn } from '../../lib/utils'
 import { ProfileManager } from '../profiles/ProfileManager'
+import { BuildProfileManager } from '../profiles/BuildProfileManager'
+import { CleanupDialog } from '../engine/CleanupDialog'
 import { ProjectTypeIcon } from './ProjectTypeIcon'
 import { PROJECT_TYPE_LABELS } from '../../lib/projectIcons'
 import Image from 'next/image'
@@ -32,6 +34,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const [isQuickActionsMenuOpen, setIsQuickActionsMenuOpen] = React.useState(false)
   const [ideError, setIdeError] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
+  const [engineVersionMismatch, setEngineVersionMismatch] = React.useState<boolean>(false)
+  const [isCleanupDialogOpen, setIsCleanupDialogOpen] = React.useState(false)
 
   const isRunning = processState.status === 'running'
   const isStarting = processState.status === 'starting'
@@ -39,7 +43,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   React.useEffect(() => {
     window.ipc.quickActionsList?.().then(setQuickActions).catch(console.error)
-  }, [])
+
+    // Check engine version mismatch if applicable
+    if (project.projectType === 'unity' || project.projectType === 'unreal') {
+      window.ipc.detectEngineVersion(project.id).then(res => {
+        setEngineVersionMismatch(!res.isMatch)
+      }).catch(console.error)
+    }
+  }, [project])
 
   const refreshIdes = React.useCallback(async () => {
     try {
@@ -86,6 +97,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       return;
     }
 
+    // Handle engine cleanup specifically for the UI context
+    if (action.id === 'clean_project') {
+      setIsCleanupDialogOpen(true)
+      return;
+    }
+
     const result = await window.ipc.quickActionsExecute?.(action.id, project.id)
     if (result && result.error) {
       setActionError(`Action Failed: ${result.error.message}`)
@@ -122,9 +139,23 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       case 'Globe': return <GlobeIcon className="w-3.5 h-3.5" />
       case 'FileText': return <FileText className="w-3.5 h-3.5" />
       case 'AlertTriangle': return <AlertTriangle className="w-3.5 h-3.5" />
+      case 'Trash2': return <Trash2 className="w-3.5 h-3.5" />
       default: return <Activity className="w-3.5 h-3.5" />
     }
   }
+
+  const handleRunBuild = async (profileId: string) => {
+    try {
+      const result = await window.ipc.runBuildProfile(profileId)
+      if (result && result.error) {
+        setActionError(`Build Failed: ${result.error.message}`)
+      }
+    } catch (e: any) {
+      setActionError(`Build Error: ${e.message}`)
+    }
+  }
+
+  const isEngine = project.projectType === 'unity' || project.projectType === 'unreal'
 
   return (
     <Card className="flex flex-col h-full bg-card/50 backdrop-blur-sm border-muted/50 transition-all hover:border-green-500/30 hover:shadow-2xl hover:shadow-green-500/10 group/card">
@@ -132,24 +163,26 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         <CardTitle className="text-lg font-black tracking-tight truncate max-w-[200px] group-hover/card:text-green-400 transition-colors duration-300" title={project.name}>
           {project.name}
         </CardTitle>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/30 border border-white/5">
-          {isStarting ? (
-            <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
-          ) : (
-            <div className={cn(
-              "w-2 h-2 rounded-full",
-              isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" :
-                isError ? "bg-red-500" : "bg-white/20"
-            )} />
-          )}
-          <span className={cn(
-            "text-[9px] font-black uppercase tracking-widest",
-            isRunning ? "text-green-500" :
-              isStarting ? "text-blue-400" :
-                isError ? "text-red-500" : "text-white/40"
-          )}>
-            {processState.status}
-          </span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/30 border border-white/5 shadow-inner">
+            {isStarting ? (
+              <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
+            ) : (
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                isRunning ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" :
+                  isError ? "bg-red-500" : "bg-white/20"
+              )} />
+            )}
+            <span className={cn(
+              "text-[9px] font-black uppercase tracking-widest",
+              isRunning ? "text-green-500" :
+                isStarting ? "text-blue-400" :
+                  isError ? "text-red-500" : "text-white/40"
+            )}>
+              {processState.status}
+            </span>
+          </div>
         </div>
       </CardHeader>
 
@@ -215,6 +248,21 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 <span>{PROJECT_TYPE_LABELS[project.projectType]}</span>
               </Badge>
             </div>
+            {engineVersionMismatch && (
+              <div className="animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-orange-400 opacity-60" />
+                  <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">Engine Check</span>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="h-6 px-3 bg-orange-500/10 border-orange-500/20 text-orange-400 rounded-lg text-[10px] font-bold"
+                  title="The project's target engine version differs from the one configured in Settings."
+                >
+                  Version Mismatch
+                </Badge>
+              </div>
+            )}
             {isRunning && (
               <div className="animate-in fade-in slide-in-from-left-2">
                 <div className="flex items-center gap-2 mb-1.5">
@@ -230,7 +278,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         </div>
       </CardContent>
 
-      <CardFooter className="px-8 pb-8 pt-2 flex gap-3">
+      <CardFooter className="px-8 pb-8 pt-2 flex gap-1">
         {isRunning || isStarting ? (
           <Button
             size="sm"
@@ -252,34 +300,53 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             <span className="tracking-wide">INITIALIZE</span>
           </Button>
         )}
-        <ProfileManager
-          projectId={project.id}
-          onRunProfile={(profileId) => onRunProfile(profileId, project.id)}
-        />
 
-        {/* Quick Actions Menu */}
+
+
+        {/* Consolidated Quick Actions Menu */}
         <div className="relative">
           <Button
             variant="outline"
-            size="icon"
-            className={cn("h-11 w-11 rounded-xl border-white/10 transition-all active:scale-95", isQuickActionsMenuOpen ? "bg-white/10" : "bg-white/5 hover:bg-white/10")}
+            className={cn("h-11 px-4 gap-2 rounded-xl transition-all active:scale-95 font-bold shadow-sm", isQuickActionsMenuOpen ? "bg-white/10 border-white/20" : "bg-white/5 border-white/10 hover:bg-white/10")}
             onClick={() => setIsQuickActionsMenuOpen(!isQuickActionsMenuOpen)}
           >
             <MoreVertical className="w-4 h-4 opacity-60" />
+            <span className="tracking-wide">ACTIONS</span>
           </Button>
 
           {isQuickActionsMenuOpen && (
-            <div className="absolute bottom-full right-0 mb-2 w-48 bg-[#151515] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2">
-              <div className="p-2 border-b border-white/5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-2">Quick Actions</span>
-              </div>
-              <div className="p-1 flex flex-col max-h-48 overflow-y-auto custom-scrollbar">
+            <div className="absolute bottom-full right-0 mb-2 w-56 bg-[#151515] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2">
+              <div className="p-1 flex flex-col max-h-64 overflow-y-auto custom-scrollbar">
+                <div className="px-3 py-2 mt-1 border-y border-white/5 flex items-center justify-between bg-white/5">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Open Application</span>
+                  <Button variant="ghost" size="icon" className="h-5 w-5 text-white/40 hover:text-white" onClick={(e) => { e.stopPropagation(); refreshIdes(); }}>
+                    <RefreshCw className="w-3 h-3" />
+                  </Button>
+                </div>
+                {ides.length === 0 ? (
+                  <div className="px-3 py-4 text-center">
+                    <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest">No IDEs Found</span>
+                  </div>
+                ) : ides.map((ide, i) => (
+                  <button
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 rounded-lg transition-colors text-left font-medium"
+                    onClick={() => handleIdeLaunch(ide)}
+                  >
+                    {getIdeIcon(ide.name)}
+                    <span className="truncate">{ide.name}</span>
+                  </button>
+                ))}
+                <div className="px-3 py-2 border-b border-white/5 bg-white/5">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Project Utilities</span>
+                </div>
                 {quickActions.filter(evaluateCondition).map((action) => (
                   <button
                     key={action.id}
                     className={cn(
-                      "flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/10 rounded-lg transition-colors text-left",
-                      action.id === 'kill_process' || action.id === 'stop_project' ? 'text-red-400 hover:text-red-300' : 'text-white/80'
+                      "flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-white/10 rounded-lg transition-colors text-left font-medium",
+                      action.id === 'kill_process' || action.id === 'stop_project' ? 'text-red-400 hover:bg-red-500/10' :
+                        action.id === 'clean_project' ? 'text-orange-400 hover:bg-orange-500/10' : 'text-white/80'
                     )}
                     onClick={() => handleQuickAction(action)}
                   >
@@ -291,46 +358,31 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             </div>
           )}
         </div>
-
-        {/* IDE Menu */}
-        <div className="relative">
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn("h-11 w-11 rounded-xl border-white/10 transition-all active:scale-95", isIdeMenuOpen ? "bg-white/10" : "bg-white/5 hover:bg-white/10")}
-            onClick={() => setIsIdeMenuOpen(!isIdeMenuOpen)}
-          >
-            <ExternalLink className="w-4 h-4 opacity-60" />
-          </Button>
-
-          {isIdeMenuOpen && (
-            <div className="absolute bottom-full right-0 mb-2 w-48 bg-[#151515] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2">
-              <div className="p-2 border-b border-white/5 flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-2">Open With</span>
-                <Button variant="ghost" size="icon" className="h-6 w-6 text-white/40 hover:text-white" onClick={(e) => { e.stopPropagation(); refreshIdes(); }}>
-                  <RefreshCw className="w-3 h-3" />
-                </Button>
-              </div>
-              <div className="p-1 flex flex-col max-h-48 overflow-y-auto custom-scrollbar">
-                {ides.length === 0 ? (
-                  <div className="px-3 py-4 text-center">
-                    <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest">No IDEs Found</span>
-                  </div>
-                ) : ides.map((ide, i) => (
-                  <button
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/10 rounded-lg transition-colors text-left"
-                    onClick={() => handleIdeLaunch(ide)}
-                  >
-                    {getIdeIcon(ide.name)}
-                    <span className="truncate">{ide.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Management Menu */}
+        <div className="flex items-center gap-1 rounded-xl bg-black/20 p-1 shadow-inner">
+          {!isEngine && <ProfileManager
+            projectId={project.id}
+            onRunProfile={(profileId) => onRunProfile(profileId, project.id)}
+          />}
+          {isEngine && (
+            <BuildProfileManager
+              projectId={project.id}
+              engine={project.projectType as 'unity' | 'unreal'}
+              onRunBuild={handleRunBuild}
+            />
           )}
         </div>
       </CardFooter>
+
+      {isEngine && (
+        <CleanupDialog
+          projectId={project.id}
+          projectName={project.name}
+          projectType={project.projectType as 'unity' | 'unreal'}
+          isOpen={isCleanupDialogOpen}
+          onOpenChange={setIsCleanupDialogOpen}
+        />
+      )}
     </Card>
   )
 }

@@ -10,7 +10,9 @@ import { ProfileService } from './services/ProfileService'
 import { PortService } from './services/PortService'
 import { IdeService } from './services/IdeService'
 import { QuickActionService } from './services/QuickActionService'
-import { ProjectType, Settings, StartupProfile, SpawnError } from '../common/types'
+import { EngineService } from './services/EngineService'
+import { BuildProfileService } from './services/BuildProfileService'
+import { ProjectType, Settings, StartupProfile, SpawnError, BuildProfile } from '../common/types'
 
 const isProd = process.env.NODE_ENV === 'production'
 
@@ -184,6 +186,38 @@ ipcMain.handle('run-profile', async (_event, profileId: string) => {
 
 ipcMain.handle('stop-profile', async (_event, profileId: string) => {
   return ProfileService.stopProfile(profileId)
+})
+
+// ---------------------------------------------------------------------------
+// Build Profiles
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('get-build-profiles', async (_event, projectId: string) => {
+  return BuildProfileService.getProfiles(projectId)
+})
+
+ipcMain.handle('save-build-profile', async (_event, profile: BuildProfile) => {
+  return BuildProfileService.saveProfile(profile)
+})
+
+ipcMain.handle('delete-build-profile', async (_event, profileId: string) => {
+  return BuildProfileService.deleteProfile(profileId)
+})
+
+ipcMain.handle('run-build-profile', async (_event, profileId: string) => {
+  return await BuildProfileService.executeBuild(profileId)
+})
+
+// ---------------------------------------------------------------------------
+// Engine Services (Diagnostics & Cleanup)
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('detect-engine-version', async (_event, projectId: string) => {
+  return await EngineService.detectEngineVersion(projectId)
+})
+
+ipcMain.handle('clean-project', async (_event, projectId: string) => {
+  return await EngineService.cleanProject(projectId)
 })
 
 // ---------------------------------------------------------------------------

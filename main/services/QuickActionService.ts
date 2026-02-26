@@ -17,7 +17,8 @@ export class QuickActionService {
         { id: 'restart_project', label: 'Restart Project', icon: 'RefreshCw', action: 'project:restart', conditions: { requiresRunning: true } },
         { id: 'open_localhost', label: 'Open Localhost URL', icon: 'Globe', action: 'network:openLocalhost', conditions: { requiresPorts: true } },
         { id: 'view_logs', label: 'View Logs', icon: 'FileText', action: 'process:viewLogs', conditions: { requiresLogs: true } },
-        { id: 'kill_process', label: 'Kill Process', icon: 'AlertTriangle', action: 'process:kill', conditions: { requiresRunning: true } }
+        { id: 'kill_process', label: 'Kill Process', icon: 'AlertTriangle', action: 'process:kill', conditions: { requiresRunning: true } },
+        { id: 'clean_project', label: 'Clean Project Caches', icon: 'Trash2', action: 'project:clean' }
     ]
 
     public static getCatalog(): QuickAction[] {
