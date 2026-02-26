@@ -14,6 +14,18 @@ const schema: any = {
   unrealPath: {
     type: 'string',
     default: ''
+  },
+  customIdes: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        path: { type: 'string' }
+      },
+      required: ['name', 'path']
+    },
+    default: []
   }
 }
 
@@ -24,7 +36,8 @@ export class SettingsService {
     return {
       scanLocations: this.store.get('scanLocations') as string[],
       unityPath: this.store.get('unityPath') as string,
-      unrealPath: this.store.get('unrealPath') as string
+      unrealPath: this.store.get('unrealPath') as string,
+      customIdes: this.store.get('customIdes') as any[] || []
     }
   }
 
@@ -32,6 +45,7 @@ export class SettingsService {
     this.store.set('scanLocations', settings.scanLocations)
     this.store.set('unityPath', settings.unityPath || '')
     this.store.set('unrealPath', settings.unrealPath || '')
+    this.store.set('customIdes', settings.customIdes || [])
   }
 
   public static addLocation(path: string): void {

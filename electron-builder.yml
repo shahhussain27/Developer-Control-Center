@@ -1,6 +1,6 @@
-appId: com.example.nextron
-productName: My Nextron App
-copyright: Copyright © 2018 Yoshihide Shiono
+appId: com.developercontrolcenter.app
+productName: Developer Control Center
+copyright: Copyright © 2026 Developer Control Center
 directories:
   output: dist
   buildResources: resources

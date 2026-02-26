@@ -13,6 +13,11 @@ export interface DiagnosticResult {
   checks: CheckResult[]
 }
 
+export interface IdeInfo {
+  name: string
+  path: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -65,6 +70,16 @@ export interface SpawnError {
   projectId: string
 }
 
+export interface IdeLaunchError extends SpawnError {
+  ideName: string
+}
+
+export interface QuickActionError {
+  projectId: string
+  actionId: string
+  message: string
+}
+
 // ---------------------------------------------------------------------------
 // Settings & Profiles
 // ---------------------------------------------------------------------------
@@ -73,6 +88,7 @@ export interface Settings {
   scanLocations: string[]
   unityPath?: string
   unrealPath?: string
+  customIdes?: IdeInfo[]
 }
 
 export interface StartupCommand {
@@ -127,6 +143,13 @@ export interface IpcHandlers {
   // Port Handlers
   'get-active-ports': () => Promise<PortInfo[]>
   'kill-process-by-pid': (pid: number) => Promise<void>
+  // IDE Handlers
+  'ide-detect': () => Promise<IdeInfo[]>
+  'ide-list': () => Promise<IdeInfo[]>
+  'ide-launch': (idePath: string, projectPath: string) => Promise<void | { error: IdeLaunchError }>
+  // Quick Actions
+  'quick-actions-list': () => Promise<QuickAction[]>
+  'quick-actions-execute': (actionId: string, projectId: string) => Promise<void | { error: QuickActionError }>
   // Window Controls (fire-and-forget via ipcRenderer.send)
   'window-minimize': () => void
   'window-maximize': () => void
@@ -143,4 +166,23 @@ export interface LogEntry {
   data: string
   timestamp: number
   type: 'stdout' | 'stderr'
+}
+
+// ---------------------------------------------------------------------------
+// Quick Actions
+// ---------------------------------------------------------------------------
+
+export interface QuickActionCondition {
+  requiresRunning?: boolean
+  requiresStopped?: boolean
+  requiresPorts?: boolean
+  requiresLogs?: boolean
+}
+
+export interface QuickAction {
+  id: string
+  label: string
+  icon: string
+  action: string
+  conditions?: QuickActionCondition
 }

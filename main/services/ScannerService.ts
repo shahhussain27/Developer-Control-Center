@@ -2,19 +2,26 @@ import fs from 'fs'
 import path from 'path'
 import { Project, ProjectType } from '../../common/types'
 import { v4 as uuidv4 } from 'uuid'
+import { SettingsService } from './SettingsService'
 
 export class ScannerService {
   private static readonly IGNORE_FOLDERS = new Set(['node_modules', '.git', 'build', 'dist', 'out', 'bin', 'obj', 'Library', 'Temp'])
   private static readonly MAX_DEPTH = 5
   private static projectsCache: Map<string, Project> = new Map()
 
+  public static async findProjectById(projectId: string): Promise<Project | null> {
+    const cached = this.projectsCache.get(projectId)
+    if (cached) return cached
+    return null
+  }
+
   public static async scanDirectory(basePath: string): Promise<Project[]> {
     const projects: Project[] = []
     await this.walk(basePath, 0, projects)
-    
+
     // Update cache
     projects.forEach(p => this.projectsCache.set(p.id, p))
-    
+
     return projects
   }
 
@@ -39,7 +46,7 @@ export class ScannerService {
         // Usually, projects don't nest (e.g., node project inside node project)
         // But for things like monorepos, we might want to continue.
         // For simplicity in V1/V2, we stop at the first project detected in a branch.
-        return 
+        return
       }
 
       // If not a project, look deeper
@@ -54,14 +61,14 @@ export class ScannerService {
 
   private static detectProject(projectPath: string): Project | null {
     const name = path.basename(projectPath)
-    
+
     // Node / React / Next.js / Electron / Nextron
     const packageJsonPath = path.join(projectPath, 'package.json')
     if (fs.existsSync(packageJsonPath)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
         const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
-        
+
         let projectType: ProjectType = 'node'
         let detectedBy = 'package.json'
 
@@ -83,19 +90,19 @@ export class ScannerService {
         return { id: uuidv4(), name, path: projectPath, projectType: 'node', runtime: 'node', detectedBy: 'package.json (invalid)' }
       }
     }
-    
+
     // Python
-    if (fs.existsSync(path.join(projectPath, 'requirements.txt')) || 
-        fs.existsSync(path.join(projectPath, 'pyproject.toml'))) {
+    if (fs.existsSync(path.join(projectPath, 'requirements.txt')) ||
+      fs.existsSync(path.join(projectPath, 'pyproject.toml'))) {
       return { id: uuidv4(), name, path: projectPath, projectType: 'python', runtime: 'python', detectedBy: 'python indicators' }
     }
-    
+
     // Unity
-    if (fs.existsSync(path.join(projectPath, 'Assets')) && 
-        fs.existsSync(path.join(projectPath, 'ProjectSettings'))) {
+    if (fs.existsSync(path.join(projectPath, 'Assets')) &&
+      fs.existsSync(path.join(projectPath, 'ProjectSettings'))) {
       return { id: uuidv4(), name, path: projectPath, projectType: 'unity', runtime: 'unity', detectedBy: 'Unity folders' }
     }
-    
+
     // Unreal
     const files = fs.readdirSync(projectPath)
     const uproject = files.find(f => f.endsWith('.uproject'))

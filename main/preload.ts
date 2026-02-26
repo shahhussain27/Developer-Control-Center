@@ -10,6 +10,10 @@ import {
   PortInfo,
   DiagnosticResult,
   ProjectType,
+  IdeInfo,
+  IdeLaunchError,
+  QuickAction,
+  QuickActionError,
 } from '../common/types'
 
 // ---------------------------------------------------------------------------
@@ -117,11 +121,25 @@ const handler = {
   killProcessByPid: (pid: number): Promise<void> =>
     ipcRenderer.invoke('kill-process-by-pid', pid),
 
+  // ----- IDE Integration ---------------------------------------------------
+  ideDetect: (): Promise<IdeInfo[]> =>
+    ipcRenderer.invoke('ide-detect'),
+  ideList: (): Promise<IdeInfo[]> =>
+    ipcRenderer.invoke('ide-list'),
+  ideLaunch: (idePath: string, projectPath: string): Promise<void | { error: IdeLaunchError }> =>
+    ipcRenderer.invoke('ide-launch', idePath, projectPath),
+
+  // ----- Quick Actions -----------------------------------------------------
+  quickActionsList: (): Promise<QuickAction[]> =>
+    ipcRenderer.invoke('quick-actions-list'),
+  quickActionsExecute: (actionId: string, projectId: string): Promise<void | { error: QuickActionError }> =>
+    ipcRenderer.invoke('quick-actions-execute', actionId, projectId),
+
   // ----- Custom Window Controls (Task Group 5) ----------------------------
   // Use send (fire-and-forget) — these map to ipcMain.on in main process
   windowMinimize: (): void => ipcRenderer.send('window-minimize'),
   windowMaximize: (): void => ipcRenderer.send('window-maximize'),
-  windowClose:    (): void => ipcRenderer.send('window-close'),
+  windowClose: (): void => ipcRenderer.send('window-close'),
 }
 
 contextBridge.exposeInMainWorld('ipc', handler)

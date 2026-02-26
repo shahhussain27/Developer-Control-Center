@@ -63,15 +63,15 @@ const logBuffers = new Map<number, RingBuffer<LogEntry>>()
 // ---------------------------------------------------------------------------
 
 const COMMAND_MAP: Record<ProjectType, string> = {
-  nextron:  'npm run dev',
+  nextron: 'npm run dev',
   electron: 'npm run dev',
-  node:     'npm run dev',
-  python:   'python main.py',
-  unity:    '',   // Handled via settings path
-  unreal:   '',   // Handled via settings path
-  generic:  'npm start',
-  nextjs:   'npm run dev',
-  react:    'npm run dev',
+  node: 'npm run dev',
+  python: 'python main.py',
+  unity: '',   // Handled via settings path
+  unreal: '',   // Handled via settings path
+  generic: 'npm start',
+  nextjs: 'npm run dev',
+  react: 'npm run dev',
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ export class ProcessService {
           const payload: ProcessStats = {
             projectId: entry.projectId,
             pid,
-            cpu:    stats.cpu,
+            cpu: stats.cpu,
             memory: stats.memory / 1024 / 1024, // bytes → MB
             timestamp: Date.now(),
           }
@@ -150,12 +150,12 @@ export class ProcessService {
 
   private static classifyError(err: NodeJS.ErrnoException): SpawnErrorCode {
     switch (err.code) {
-      case 'ENOENT':  return 'EXECUTABLE_MISSING'
+      case 'ENOENT': return 'EXECUTABLE_MISSING'
       case 'EACCES':
-      case 'EPERM':   return 'PERMISSION_DENIED'
+      case 'EPERM': return 'PERMISSION_DENIED'
       case 'EAGAIN':
-      case 'EMFILE':  return 'SPAWN_FAILURE'
-      default:        return 'UNKNOWN'
+      case 'EMFILE': return 'SPAWN_FAILURE'
+      default: return 'UNKNOWN'
     }
   }
 
@@ -165,7 +165,7 @@ export class ProcessService {
   ): SpawnError {
     return {
       projectId,
-      code:    this.classifyError(err),
+      code: this.classifyError(err),
       message: err.message,
     }
   }
@@ -341,20 +341,24 @@ export class ProcessService {
 
     // Clean exit
     child.on('exit', (code) => {
+      // If the PID is no longer in projectIndex, it was manually killed/restarted by stopCommand
+      const manualKilled = projectIndex.get(projectId) !== pid
+      const finalStatus = (code === 0 || manualKilled) ? 'stopped' : 'error'
+
       const exitEntry = registry.get(pid)
       if (exitEntry) {
-        exitEntry.status = code === 0 ? 'stopped' : 'error'
+        exitEntry.status = finalStatus
       }
-      // Only clear projectIndex if this PID is still the active one
-      if (projectIndex.get(projectId) === pid) {
+
+      if (!manualKilled) {
         projectIndex.delete(projectId)
       }
       processHandles.delete(pid)
 
       const exitStatus: ProcessState = {
         pid: null,
-        status: code === 0 ? 'stopped' : 'error',
-        error: code !== 0 ? `Process exited with code ${code}` : undefined,
+        status: finalStatus,
+        error: finalStatus === 'error' ? `Process exited with code ${code}` : undefined,
       }
       this.eventEmitter('process-state', { projectId, ...exitStatus })
       this.emitLog(pid, projectId, `Process exited with code ${code}`, code === 0 ? 'stdout' : 'stderr')
@@ -376,6 +380,8 @@ export class ProcessService {
       this.eventEmitter('process-state', { projectId, pid: null, status: 'error', error: spawnErr })
       this.emitLog(pid, projectId, `Process error [${spawnErr.code}]: ${err.message}`, 'stderr')
     })
+
+    this.eventEmitter('process-state', { projectId, pid, status: 'running' })
 
     return { pid }
   }
@@ -505,6 +511,9 @@ export class ProcessService {
 
     // Spawn taskkill — no exec()
     this.spawnKill(pid)
+
+    // Emit stopped deterministically immediately to sync UI prior to async exit fire
+    this.eventEmitter('process-state', { projectId, pid: null, status: 'stopped' })
   }
 
   /**

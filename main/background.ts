@@ -8,6 +8,8 @@ import { SettingsService } from './services/SettingsService'
 import { DoctorService } from './services/DoctorService'
 import { ProfileService } from './services/ProfileService'
 import { PortService } from './services/PortService'
+import { IdeService } from './services/IdeService'
+import { QuickActionService } from './services/QuickActionService'
 import { ProjectType, Settings, StartupProfile, SpawnError } from '../common/types'
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -24,30 +26,30 @@ if (isProd) {
 
 let mainWindow: BrowserWindow | null = null
 
-;(async () => {
-  await app.whenReady()
+  ; (async () => {
+    await app.whenReady()
 
-  mainWindow = createWindow('main', {
-    width: 1200,
-    height: 800,
-    frame: false,          // Custom window chrome — Task Group 5
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  })
+    mainWindow = createWindow('main', {
+      width: 1200,
+      height: 800,
+      frame: false,          // Custom window chrome — Task Group 5
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+      },
+    })
 
-  if (isProd) {
-    await mainWindow.loadURL('app://./home')
-  } else {
-    const port = process.argv[2]
-    await mainWindow.loadURL(`http://localhost:${port}/home`)
-    mainWindow.webContents.openDevTools()
-  }
+    if (isProd) {
+      await mainWindow.loadURL('app://./home')
+    } else {
+      const port = process.argv[2]
+      await mainWindow.loadURL(`http://localhost:${port}/home`)
+      mainWindow.webContents.openDevTools()
+    }
 
-  ProcessService.setEventEmitter((channel, data) => {
-    mainWindow?.webContents.send(channel, data)
-  })
-})()
+    ProcessService.setEventEmitter((channel, data) => {
+      mainWindow?.webContents.send(channel, data)
+    })
+  })()
 
 // ---------------------------------------------------------------------------
 // App Lifecycle
@@ -194,4 +196,34 @@ ipcMain.handle('get-active-ports', async () => {
 
 ipcMain.handle('kill-process-by-pid', async (_event, pid: number) => {
   return await ProcessService.killProcessByPid(pid)
+})
+
+// ---------------------------------------------------------------------------
+// IDE Integration
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('ide-detect', async () => {
+  return await IdeService.detectIdes()
+})
+
+ipcMain.handle('ide-list', async () => {
+  return await IdeService.listIdes()
+})
+
+ipcMain.handle('ide-launch', async (_event, idePath: string, projectPath: string) => {
+  // Use a default name for error tracking if needed
+  const name = path.basename(idePath)
+  return await IdeService.launchIde(idePath, projectPath, name)
+})
+
+// ---------------------------------------------------------------------------
+// Quick Actions
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('quick-actions-list', async () => {
+  return QuickActionService.getCatalog()
+})
+
+ipcMain.handle('quick-actions-execute', async (_event, actionId: string, projectId: string) => {
+  return await QuickActionService.execute(actionId, projectId)
 })
