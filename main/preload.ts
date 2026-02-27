@@ -159,6 +159,42 @@ const handler = {
   windowMinimize: (): void => ipcRenderer.send('window-minimize'),
   windowMaximize: (): void => ipcRenderer.send('window-maximize'),
   windowClose: (): void => ipcRenderer.send('window-close'),
+
+  // ----- Auto Updater ------------------------------------------------------
+  checkForUpdate: (): Promise<any> => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate: (): Promise<any> => ipcRenderer.invoke('download-update'),
+  installUpdate: (): void => ipcRenderer.send('install-update'),
+
+  onUpdateChecking: (callback: () => void): (() => void) => {
+    const subscription = () => callback()
+    ipcRenderer.on('update-checking', subscription)
+    return () => ipcRenderer.removeListener('update-checking', subscription)
+  },
+  onUpdateAvailable: (callback: (info: any) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, info: any) => callback(info)
+    ipcRenderer.on('update-available', subscription)
+    return () => ipcRenderer.removeListener('update-available', subscription)
+  },
+  onUpdateNotAvailable: (callback: (info: any) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, info: any) => callback(info)
+    ipcRenderer.on('update-not-available', subscription)
+    return () => ipcRenderer.removeListener('update-not-available', subscription)
+  },
+  onUpdateError: (callback: (err: string) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, err: string) => callback(err)
+    ipcRenderer.on('update-error', subscription)
+    return () => ipcRenderer.removeListener('update-error', subscription)
+  },
+  onUpdateDownloadProgress: (callback: (progressObj: any) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, progressObj: any) => callback(progressObj)
+    ipcRenderer.on('update-download-progress', subscription)
+    return () => ipcRenderer.removeListener('update-download-progress', subscription)
+  },
+  onUpdateDownloaded: (callback: (info: any) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, info: any) => callback(info)
+    ipcRenderer.on('update-downloaded', subscription)
+    return () => ipcRenderer.removeListener('update-downloaded', subscription)
+  },
 }
 
 contextBridge.exposeInMainWorld('ipc', handler)

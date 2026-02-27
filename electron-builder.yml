@@ -1,4 +1,4 @@
-appId: com.developercontrolcenter.app
+appId: com.shahhussain27.dcc
 productName: Developer Control Center
 copyright: Copyright © 2026 Developer Control Center
 directories:
@@ -9,4 +9,7 @@ files:
     filter:
       - package.json
       - app
-publish: null
+publish:
+  provider: github
+  owner: shahhussain27
+  repo: Developer-Control-Center

@@ -261,3 +261,48 @@ ipcMain.handle('quick-actions-list', async () => {
 ipcMain.handle('quick-actions-execute', async (_event, actionId: string, projectId: string) => {
   return await QuickActionService.execute(actionId, projectId)
 })
+
+// ---------------------------------------------------------------------------
+// Auto Updater
+// ---------------------------------------------------------------------------
+
+import { autoUpdater } from 'electron-updater'
+
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+autoUpdater.on('checking-for-update', () => {
+  mainWindow?.webContents.send('update-checking')
+})
+
+autoUpdater.on('update-available', (info) => {
+  mainWindow?.webContents.send('update-available', info)
+})
+
+autoUpdater.on('update-not-available', (info) => {
+  mainWindow?.webContents.send('update-not-available', info)
+})
+
+autoUpdater.on('error', (err) => {
+  mainWindow?.webContents.send('update-error', err.message || err.toString())
+})
+
+autoUpdater.on('download-progress', (progressObj) => {
+  mainWindow?.webContents.send('update-download-progress', progressObj)
+})
+
+autoUpdater.on('update-downloaded', (info) => {
+  mainWindow?.webContents.send('update-downloaded', info)
+})
+
+ipcMain.handle('check-for-update', async () => {
+  return await autoUpdater.checkForUpdates()
+})
+
+ipcMain.handle('download-update', async () => {
+  return await autoUpdater.downloadUpdate()
+})
+
+ipcMain.on('install-update', () => {
+  autoUpdater.quitAndInstall()
+})
