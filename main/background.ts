@@ -306,3 +306,7 @@ ipcMain.handle('download-update', async () => {
 ipcMain.on('install-update', () => {
   autoUpdater.quitAndInstall()
 })
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})

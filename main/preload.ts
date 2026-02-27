@@ -195,6 +195,8 @@ const handler = {
     ipcRenderer.on('update-downloaded', subscription)
     return () => ipcRenderer.removeListener('update-downloaded', subscription)
   },
+
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
 }
 
 contextBridge.exposeInMainWorld('ipc', handler)

@@ -8,8 +8,12 @@ export const UpdateManager: React.FC = () => {
     const [progress, setProgress] = useState<number>(0)
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [versionInfo, setVersionInfo] = useState<any>(null)
+    const [currentVersion, setCurrentVersion] = useState<string>('')
 
     useEffect(() => {
+        // Fetch current app version
+        window.ipc.getAppVersion().then(ver => setCurrentVersion(ver)).catch(console.error)
+
         // Setup IPC listeners
         const unsubs = [
             window.ipc.onUpdateChecking(() => setStatus('checking')),
@@ -62,13 +66,22 @@ export const UpdateManager: React.FC = () => {
     return (
         <Card className="bg-card/30 border-muted/50 backdrop-blur-xl mt-8">
             <CardHeader>
-                <CardTitle className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">
-                    <DownloadCloud className="w-5 h-5 text-blue-400" />
-                    Application Updates
-                </CardTitle>
-                <CardDescription className="text-xs">
-                    Keep your Developer Control Center up to date
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">
+                            <DownloadCloud className="w-5 h-5 text-blue-400" />
+                            Application Updates
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                            Keep your Developer Control Center up to date
+                        </CardDescription>
+                    </div>
+                    {currentVersion && (
+                        <div className="px-3 py-1 bg-white/5 rounded-full border border-white/10 text-xs font-mono text-white/70">
+                            v{currentVersion}
+                        </div>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
