@@ -21,6 +21,15 @@ interface ProjectCardProps {
   onRunProfile: (profileId: string, projectId: string) => void
 }
 
+const formatSize = (bytes?: number) => {
+  if (!bytes) return 'Unknown Size'
+  const mb = bytes / (1024 * 1024)
+  if (mb > 1024) {
+    return (mb / 1024).toFixed(1) + ' GB'
+  }
+  return Math.round(mb) + ' MB'
+}
+
 export const ProjectCard: React.FC<ProjectCardProps> = ({
   project,
   processState,
@@ -246,6 +255,18 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               >
                 <ProjectTypeIcon type={project.projectType} size={10} />
                 <span>{PROJECT_TYPE_LABELS[project.projectType]}</span>
+              </Badge>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <FolderOpen className="w-3.5 h-3.5 text-blue-400 opacity-60" />
+                <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">Size</span>
+              </div>
+              <Badge
+                variant="outline"
+                className="h-6 px-3 bg-blue-500/10 border-blue-500/20 text-blue-400 rounded-lg text-[10px] font-bold gap-1.5 flex items-center tabular-nums"
+              >
+                {formatSize(project.size)}
               </Badge>
             </div>
             {engineVersionMismatch && (

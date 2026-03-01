@@ -12,6 +12,7 @@ import {
   LogEntry,
 } from '../../common/types'
 import { SettingsService } from './SettingsService'
+import { ScannerService } from './ScannerService'
 import { RingBuffer } from './RingBuffer'
 
 // ---------------------------------------------------------------------------
@@ -100,7 +101,9 @@ export class ProcessService {
     // Best-effort stop all running processes
     for (const pid of Array.from(projectIndex.values())) {
       const entry = registry.get(pid)
-      if (entry) this.stopCommand(entry.projectId)
+      if (entry && entry.type !== 'unity') {
+        this.stopCommand(entry.projectId)
+      }
     }
   }
 
@@ -118,6 +121,8 @@ export class ProcessService {
     }
 
     this.monitoringInterval = setInterval(async () => {
+      await this.detectUnityProcesses()
+
       if (registry.size === 0) return
 
       for (const [pid, entry] of registry.entries()) {
@@ -136,12 +141,82 @@ export class ProcessService {
         } catch {
           // Process may have exited between poll cycles — harmless
           console.warn(`[ProcessService] pidusage failed for PID ${pid} (${entry.projectId})`)
+          if (!processHandles.has(pid)) {
+            // Unmanaged external process dying
+            entry.status = 'stopped'
+            projectIndex.delete(entry.projectId)
+            this.eventEmitter('process-state', { projectId: entry.projectId, pid: null, status: 'stopped' })
+          }
         }
       }
     }, MONITOR_INTERVAL_MS)
 
     // Do not prevent app exit when the interval is the only thing left running
     this.monitoringInterval.unref()
+  }
+
+  private static async detectUnityProcesses(): Promise<void> {
+    return new Promise((resolve) => {
+      const child = spawn('wmic', ['process', 'where', 'name="Unity.exe"', 'get', 'ProcessId,CommandLine', '/format:list'], {
+        shell: false,
+        stdio: ['ignore', 'pipe', 'ignore']
+      })
+      let output = ''
+      child.stdout?.on('data', (d) => { output += d.toString() })
+      child.on('close', () => {
+        const lines = output.split('\n').map(l => l.trim()).filter(Boolean)
+        let currentParams: Record<string, string> = {}
+        for (const line of lines) {
+          const [key, ...rest] = line.split('=')
+          if (key && rest.length > 0) {
+            currentParams[key] = rest.join('=')
+          }
+          if (currentParams.ProcessId && currentParams.CommandLine) {
+            const cmd = currentParams.CommandLine
+            const pidString = currentParams.ProcessId
+            currentParams = {}
+
+            const pid = parseInt(pidString, 10)
+            let pPath = ''
+            const projectPathIndex = cmd.indexOf('-projectPath')
+            if (projectPathIndex !== -1) {
+              const after = cmd.substring(projectPathIndex + '-projectPath'.length).trim()
+              if (after.startsWith('"')) {
+                const end = after.indexOf('"', 1)
+                if (end !== -1) pPath = after.substring(1, end)
+              } else {
+                const end = after.indexOf(' ')
+                pPath = end !== -1 ? after.substring(0, end) : after
+              }
+            }
+
+            if (pPath) {
+              const pId = ScannerService.findProjectByPath(pPath)
+              if (pId && !projectIndex.has(pId) && !registry.has(pid)) {
+                this.registerExternalUnityProcess(pId, pid, cmd)
+              }
+            }
+          }
+        }
+        resolve()
+      })
+      child.on('error', () => resolve())
+    })
+  }
+
+  private static registerExternalUnityProcess(projectId: string, pid: number, cmd: string) {
+    const entry: ProcessEntry = {
+      pid,
+      projectId,
+      command: cmd,
+      startTime: Date.now(),
+      status: 'running',
+      type: 'unity',
+    }
+    registry.set(pid, entry)
+    projectIndex.set(projectId, pid)
+    this.ensureLogBuffer(pid).clear()
+    this.eventEmitter('process-state', { projectId, pid, status: 'running' })
   }
 
   // -------------------------------------------------------------------------
@@ -238,6 +313,8 @@ export class ProcessService {
     // Guarantee no duplicate — stop any existing run for this project first
     this.stopCommand(projectId)
 
+    SettingsService.incrementProjectUsage(projectId)
+
     const settings = SettingsService.getSettings()
     let execPath: string
     let args: string[]
@@ -292,12 +369,17 @@ export class ProcessService {
     const commandStr = [execPath, ...args].join(' ')
 
     let child: ChildProcess
+    const spawnOptions: import('child_process').SpawnOptions = {
+      cwd,
+      shell: useShell,
+      stdio: type === 'unity' ? 'ignore' : ['ignore', 'pipe', 'pipe'],
+    }
+    if (type === 'unity') {
+      spawnOptions.detached = true
+    }
+
     try {
-      child = spawn(execPath, args, {
-        cwd,
-        shell: useShell,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      child = spawn(execPath, args, spawnOptions)
     } catch (rawErr) {
       const err = rawErr as NodeJS.ErrnoException
       console.error(`[ProcessService] Spawn threw for ${projectId}:`, err)
@@ -323,21 +405,26 @@ export class ProcessService {
       command: commandStr,
       startTime: Date.now(),
       status: 'running',
+      type: type,
     }
     registry.set(pid, entry)
     projectIndex.set(projectId, pid)
     processHandles.set(pid, child)
     this.ensureLogBuffer(pid).clear() // Fresh buffer for this run
 
-    // Stream stdout
-    child.stdout?.on('data', (data: Buffer) => {
-      this.emitLog(pid, projectId, data.toString(), 'stdout')
-    })
+    if (type === 'unity') {
+      child.unref()
+    } else {
+      // Stream stdout
+      child.stdout?.on('data', (data: Buffer) => {
+        this.emitLog(pid, projectId, data.toString(), 'stdout')
+      })
 
-    // Stream stderr
-    child.stderr?.on('data', (data: Buffer) => {
-      this.emitLog(pid, projectId, data.toString(), 'stderr')
-    })
+      // Stream stderr
+      child.stderr?.on('data', (data: Buffer) => {
+        this.emitLog(pid, projectId, data.toString(), 'stderr')
+      })
+    }
 
     // Clean exit
     child.on('exit', (code) => {
@@ -429,6 +516,7 @@ export class ProcessService {
       command: commandStr,
       startTime: Date.now(),
       status: 'running',
+      type: 'generic',
     }
     registry.set(pid, entry)
     projectIndex.set(projectId, pid)

@@ -106,6 +106,12 @@ const handler = {
     return () => ipcRenderer.removeListener('process-state', subscription)
   },
 
+  onProjectUpdated: (callback: (project: Project) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, data: Project) => callback(data)
+    ipcRenderer.on('project-updated', subscription)
+    return () => ipcRenderer.removeListener('project-updated', subscription)
+  },
+
   // ----- Startup Profiles --------------------------------------------------
   getProfiles: (projectId: string): Promise<StartupProfile[]> =>
     ipcRenderer.invoke('get-profiles', projectId),

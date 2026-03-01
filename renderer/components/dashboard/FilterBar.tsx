@@ -22,10 +22,10 @@ const RUNTIME_OPTIONS: Runtime[] = ['node', 'python', 'unity', 'unreal']
 const STATUS_OPTIONS: ProcessStatus[] = ['running', 'starting', 'stopped', 'error']
 
 const STATUS_COLORS: Record<ProcessStatus, string> = {
-  running:  'text-green-400',
+  running: 'text-green-400',
   starting: 'text-blue-400',
-  stopped:  'text-white/40',
-  error:    'text-red-400',
+  stopped: 'text-white/40',
+  error: 'text-red-400',
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +97,8 @@ interface FilterBarProps {
   /** Whether the filter panel is expanded. */
   expanded: boolean
   onToggleExpanded: () => void
+  sortMode: 'lastModified' | 'mostUsed'
+  onSortModeChange: (mode: 'lastModified' | 'mostUsed') => void
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -106,6 +108,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   filteredCount,
   expanded,
   onToggleExpanded,
+  sortMode,
+  onSortModeChange,
 }) => {
   const empty = isFilterEmpty(filters)
 
@@ -172,9 +176,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {empty
             ? `${totalCount} projects`
             : <span>
-                <span className="text-primary">{filteredCount}</span>
-                {' / '}{totalCount}
-              </span>
+              <span className="text-primary">{filteredCount}</span>
+              {' / '}{totalCount}
+            </span>
           }
         </div>
 
@@ -189,6 +193,28 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             Clear
           </button>
         )}
+
+        {/* Sort Toggle */}
+        <div className="flex items-center bg-white/5 rounded-xl border border-white/10 p-0.5 ml-auto">
+          <button
+            onClick={() => onSortModeChange('lastModified')}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+              sortMode === 'lastModified' ? "bg-primary text-primary-foreground shadow-sm" : "text-white/40 hover:text-white/80"
+            )}
+          >
+            Recent
+          </button>
+          <button
+            onClick={() => onSortModeChange('mostUsed')}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+              sortMode === 'mostUsed' ? "bg-primary text-primary-foreground shadow-sm" : "text-white/40 hover:text-white/80"
+            )}
+          >
+            Frequent
+          </button>
+        </div>
       </div>
 
       {/* ---- Expanded filter panel ---- */}
@@ -239,9 +265,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               >
                 <span className={cn('w-1.5 h-1.5 rounded-full inline-block', {
                   'bg-green-500': status === 'running',
-                  'bg-blue-400':  status === 'starting',
-                  'bg-white/20':  status === 'stopped',
-                  'bg-red-500':   status === 'error',
+                  'bg-blue-400': status === 'starting',
+                  'bg-white/20': status === 'stopped',
+                  'bg-red-500': status === 'error',
                 })} />
                 <span className={filters.status === status ? '' : STATUS_COLORS[status]}>
                   {status}

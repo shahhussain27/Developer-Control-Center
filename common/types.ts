@@ -25,6 +25,8 @@ export interface Project {
   projectType: ProjectType
   runtime: Runtime
   detectedBy: string
+  size?: number
+  lastModified?: number
 }
 
 export type ProcessStatus = 'stopped' | 'running' | 'starting' | 'error'
@@ -43,6 +45,7 @@ export interface ProcessEntry {
   command: string
   startTime: number
   status: 'running' | 'stopped' | 'error'
+  type: ProjectType
 }
 
 export interface ProcessStats {
@@ -89,6 +92,7 @@ export interface Settings {
   unityPath?: string
   unrealPath?: string
   customIdes?: IdeInfo[]
+  projectUsage?: Record<string, number>
 }
 
 export interface StartupCommand {

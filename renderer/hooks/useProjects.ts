@@ -13,13 +13,13 @@ import {
 const RENDERER_LOG_CAP = 500
 
 export const useProjects = () => {
-  const [projects, setProjects]             = useState<Project[]>([])
-  const [loading, setLoading]               = useState(false)
-  const [processStates, setProcessStates]   = useState<Record<string, ProcessState>>({})
-  const [logs, setLogs]                     = useState<Record<string, LogEntry[]>>({})
-  const [processStats, setProcessStats]     = useState<Record<string, ProcessStats>>({})
-  const [settings, setSettings]             = useState<Settings>({ scanLocations: [] })
-  const [lastError, setLastError]           = useState<SpawnError | null>(null)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(false)
+  const [processStates, setProcessStates] = useState<Record<string, ProcessState>>({})
+  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({})
+  const [processStats, setProcessStats] = useState<Record<string, ProcessStats>>({})
+  const [settings, setSettings] = useState<Settings>({ scanLocations: [] })
+  const [lastError, setLastError] = useState<SpawnError | null>(null)
 
   // ---------------------------------------------------------------------------
   // Boot: load settings + auto-scan saved locations
@@ -33,7 +33,7 @@ export const useProjects = () => {
         const detected = await window.ipc.scanDirectory(loc)
         setProjects(prev => {
           const existingPaths = new Set(prev.map((p: Project) => p.path))
-          const newProjects   = detected.filter((p: Project) => !existingPaths.has(p.path))
+          const newProjects = detected.filter((p: Project) => !existingPaths.has(p.path))
           return newProjects.length > 0 ? [...prev, ...newProjects] : prev
         })
       }
@@ -77,10 +77,22 @@ export const useProjects = () => {
       },
     )
 
+    // Project data updates (like async size calculation)
+    const unsubProjectUpdate = window.ipc.onProjectUpdated?.((updatedProject: Project) => {
+      setProjects((prev: Project[]) => {
+        const idx = prev.findIndex(p => p.id === updatedProject.id)
+        if (idx === -1) return prev
+        const next = [...prev]
+        next[idx] = updatedProject
+        return next
+      })
+    })
+
     return () => {
       unsubLog()
       unsubStats()
       unsubState()
+      if (unsubProjectUpdate) unsubProjectUpdate()
     }
   }, [])
 
@@ -97,7 +109,7 @@ export const useProjects = () => {
       const detected = await window.ipc.scanDirectory(dir)
       setProjects((prev: Project[]) => {
         const existingPaths = new Set(prev.map((p: Project) => p.path))
-        const newProjects   = detected.filter((p: Project) => !existingPaths.has(p.path))
+        const newProjects = detected.filter((p: Project) => !existingPaths.has(p.path))
         return newProjects.length > 0 ? [...prev, ...newProjects] : prev
       })
     } finally {

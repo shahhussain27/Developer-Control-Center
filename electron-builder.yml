@@ -13,3 +13,4 @@ publish:
   provider: github
   owner: shahhussain27
   repo: Developer-Control-Center
+  private: true

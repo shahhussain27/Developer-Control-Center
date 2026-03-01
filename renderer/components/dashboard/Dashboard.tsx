@@ -31,12 +31,22 @@ export const Dashboard: React.FC = () => {
     runProfile,
   } = useProjects()
 
-  const [currentView, setCurrentView]         = useState<ViewType>('projects')
-  const [filters, setFilters]                 = useState<ProjectFilters>(DEFAULT_FILTERS)
-  const [filterExpanded, setFilterExpanded]   = useState(false)
+  const [currentView, setCurrentView] = useState<ViewType>('projects')
+  const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_FILTERS)
+  const [filterExpanded, setFilterExpanded] = useState(false)
+  const [sortMode, setSortMode] = useState<'lastModified' | 'mostUsed'>('lastModified')
 
   // Pure, no-mutation application of filter state
-  const filteredProjects = applyFilters(projects, filters, processStates)
+  const baseFiltered = applyFilters(projects, filters, processStates)
+  const filteredProjects = [...baseFiltered].sort((a, b) => {
+    if (sortMode === 'lastModified') {
+      return (b.lastModified || 0) - (a.lastModified || 0)
+    } else {
+      const aUsage = settings.projectUsage?.[a.id] || 0
+      const bUsage = settings.projectUsage?.[b.id] || 0
+      return bUsage - aUsage
+    }
+  })
 
   const renderContent = () => {
     switch (currentView) {
@@ -81,7 +91,7 @@ export const Dashboard: React.FC = () => {
                 const detected = await window.ipc.scanDirectory(dirPath)
                 setProjects((prev: Project[]) => {
                   const existingPaths = new Set(prev.map((p: Project) => p.path))
-                  const newProjects   = detected.filter((p: Project) => !existingPaths.has(p.path))
+                  const newProjects = detected.filter((p: Project) => !existingPaths.has(p.path))
                   return newProjects.length > 0 ? [...prev, ...newProjects] : prev
                 })
               }
@@ -123,6 +133,8 @@ export const Dashboard: React.FC = () => {
                 filteredCount={filteredProjects.length}
                 expanded={filterExpanded}
                 onToggleExpanded={() => setFilterExpanded((v) => !v)}
+                sortMode={sortMode}
+                onSortModeChange={setSortMode}
               />
             </div>
 
