@@ -66,6 +66,15 @@ const handler = {
   getProcessLogs: (pid: number): Promise<LogEntry[]> =>
     ipcRenderer.invoke('get-process-logs', pid),
 
+  sendProcessInput: (pid: number, input: string): Promise<void> =>
+    ipcRenderer.invoke('send-process-input', pid, input),
+
+  startInteractiveShell: (projectId: string, cwd: string): Promise<{ pid?: number, error?: SpawnError }> =>
+    ipcRenderer.invoke('start-interactive-shell', projectId, cwd),
+
+  sendShellInput: (projectId: string, input: string): Promise<void> =>
+    ipcRenderer.invoke('send-shell-input', projectId, input),
+
   // ----- Settings ----------------------------------------------------------
   getSettings: (): Promise<Settings> =>
     ipcRenderer.invoke('get-settings'),

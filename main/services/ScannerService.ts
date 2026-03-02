@@ -4,9 +4,12 @@ import { Project, ProjectType } from '../../common/types'
 import { v4 as uuidv4 } from 'uuid'
 import { SettingsService } from './SettingsService'
 import { BrowserWindow } from 'electron'
+import fg from 'fast-glob'
 
 export class ScannerService {
-  private static readonly IGNORE_FOLDERS = new Set(['node_modules', '.git', 'build', 'dist', 'out', 'bin', 'obj', 'Library', 'Temp'])
+  private static readonly IGNORE_FOLDERS = new Set([
+    'node_modules', '.git', 'build', 'dist', 'out', 'bin', 'obj', 'Library', 'Temp', 'coverage', '.next'
+  ])
   private static readonly MAX_DEPTH = 5
   private static projectsCache: Map<string, Project> = new Map()
 
@@ -63,7 +66,43 @@ export class ScannerService {
 
   public static async scanDirectory(basePath: string): Promise<Project[]> {
     const projects: Project[] = []
-    await this.walk(basePath, 0, projects)
+
+    try {
+      // Find indicators of projects up to depth 5
+      // This is dramatically faster than manual fs traversal and doesn't block the UI thread
+      const entries = await fg([
+        '**/package.json',
+        '**/requirements.txt',
+        '**/pyproject.toml',
+        '**/*.uproject',
+        '**/ProjectSettings/ProjectVersion.txt'
+      ], {
+        cwd: basePath,
+        ignore: Array.from(this.IGNORE_FOLDERS).map(f => `**/${f}/**`),
+        deep: this.MAX_DEPTH + 1, // +1 because ProjectSettings is a subfolder
+        absolute: true,
+        onlyFiles: true,
+        suppressErrors: true
+      })
+
+      const uniqueDirs = new Set<string>()
+      for (const entry of entries) {
+        // If it was ProjectSettings/ProjectVersion.txt, the project root is one level higher
+        const dir = entry.endsWith('ProjectVersion.txt')
+          ? path.dirname(path.dirname(entry))
+          : path.dirname(entry)
+        uniqueDirs.add(dir)
+      }
+
+      for (const dir of uniqueDirs) {
+        const project = this.detectProject(dir)
+        if (project) {
+          projects.push(project)
+        }
+      }
+    } catch (e) {
+      console.error(`Error scanning directory ${basePath}:`, e)
+    }
 
     // Update cache
     projects.forEach(p => this.projectsCache.set(p.id, p))
@@ -73,36 +112,6 @@ export class ScannerService {
 
   public static getProject(id: string): Project | undefined {
     return this.projectsCache.get(id)
-  }
-
-  private static async walk(currentPath: string, depth: number, projects: Project[]): Promise<void> {
-    if (depth > this.MAX_DEPTH) return
-
-    try {
-      const stats = fs.statSync(currentPath)
-      if (!stats.isDirectory()) return
-
-      const folderName = path.basename(currentPath)
-      if (this.IGNORE_FOLDERS.has(folderName)) return
-
-      // Attempt to detect if current folder is a project
-      const project = this.detectProject(currentPath)
-      if (project) {
-        projects.push(project)
-        // Usually, projects don't nest (e.g., node project inside node project)
-        // But for things like monorepos, we might want to continue.
-        // For simplicity in V1/V2, we stop at the first project detected in a branch.
-        return
-      }
-
-      // If not a project, look deeper
-      const entries = fs.readdirSync(currentPath)
-      for (const entry of entries) {
-        await this.walk(path.join(currentPath, entry), depth + 1, projects)
-      }
-    } catch (e) {
-      console.error(`Error walking ${currentPath}:`, e)
-    }
   }
 
   private static detectProject(projectPath: string): Project | null {
@@ -130,37 +139,75 @@ export class ScannerService {
       try {
         const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
         const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
+        const scripts = pkg.scripts || {}
 
         let projectType: ProjectType = 'node'
         let detectedBy = 'package.json'
 
+        let confidenceScore: 'high' | 'medium' | 'low' = 'low'
+
+        // Check for runnable scripts
+        if (scripts.start || scripts.dev || scripts.build) {
+          confidenceScore = 'medium'
+        }
+
+        // Framework checks (automatic high confidence)
         if (deps['nextron']) {
           projectType = 'nextron'
           detectedBy = 'package.json (nextron)'
+          confidenceScore = 'high'
         } else if (deps['electron']) {
           projectType = 'electron'
           detectedBy = 'package.json (electron)'
+          confidenceScore = 'high'
         } else if (deps['next']) {
           projectType = 'nextjs'
+          confidenceScore = 'high'
         } else if (deps['react']) {
           projectType = 'react'
+          confidenceScore = 'medium'
         }
 
-        const project: Project = { id: uuidv4(), name, path: projectPath, projectType, runtime: 'node', detectedBy, lastModified }
+        // Structural checks
+        if (fs.existsSync(path.join(projectPath, 'src'))) {
+          confidenceScore = confidenceScore === 'low' ? 'medium' : 'high'
+        }
+
+        const frameworkConfigs = ['next.config.js', 'vite.config.ts', 'vite.config.js', 'angular.json', 'vue.config.js', 'gatsby-config.js']
+        for (const config of frameworkConfigs) {
+          if (fs.existsSync(path.join(projectPath, config))) {
+            confidenceScore = 'high'
+            break
+          }
+        }
+
+        // If it's a bare package.json with no scripts, no src, no framework config -> likely a dependency artifact/sub-module. Ignore it.
+        if (confidenceScore === 'low') {
+          return null
+        }
+
+        const project: Project = {
+          id: uuidv4(),
+          name,
+          path: projectPath,
+          projectType,
+          runtime: 'node',
+          detectedBy,
+          lastModified,
+          confidenceScore
+        }
         triggerSizeCalculation(project)
         return project
       } catch (e) {
-        // Fallback to generic Node if JSON is invalid
-        const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'node', runtime: 'node', detectedBy: 'package.json (invalid)', lastModified }
-        triggerSizeCalculation(project)
-        return project
+        // Fallback to generic Node if JSON is invalid but treat as low confidence -> ignore
+        return null
       }
     }
 
     // Python
     if (fs.existsSync(path.join(projectPath, 'requirements.txt')) ||
       fs.existsSync(path.join(projectPath, 'pyproject.toml'))) {
-      const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'python', runtime: 'python', detectedBy: 'python indicators', lastModified }
+      const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'python', runtime: 'python', detectedBy: 'python indicators', lastModified, confidenceScore: 'high' }
       triggerSizeCalculation(project)
       return project
     }
@@ -168,7 +215,7 @@ export class ScannerService {
     // Unity
     if (fs.existsSync(path.join(projectPath, 'Assets')) &&
       fs.existsSync(path.join(projectPath, 'ProjectSettings'))) {
-      const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'unity', runtime: 'unity', detectedBy: 'Unity folders', lastModified }
+      const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'unity', runtime: 'unity', detectedBy: 'Unity folders', lastModified, confidenceScore: 'high' }
       triggerSizeCalculation(project)
       return project
     }
@@ -177,7 +224,7 @@ export class ScannerService {
     const files = fs.readdirSync(projectPath)
     const uproject = files.find(f => f.endsWith('.uproject'))
     if (uproject) {
-      const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'unreal', runtime: 'unreal', detectedBy: uproject, lastModified }
+      const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'unreal', runtime: 'unreal', detectedBy: uproject, lastModified, confidenceScore: 'high' }
       triggerSizeCalculation(project)
       return project
     }

@@ -9,6 +9,7 @@ files:
     filter:
       - package.json
       - app
+      - resources/splash.html
 publish:
   provider: github
   owner: shahhussain27

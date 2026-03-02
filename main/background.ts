@@ -27,17 +27,42 @@ if (isProd) {
 // ---------------------------------------------------------------------------
 
 let mainWindow: BrowserWindow | null = null
+let splashWindow: BrowserWindow | null = null
 
   ; (async () => {
     await app.whenReady()
+
+    // Create Splash Screen
+    splashWindow = new BrowserWindow({
+      width: 500,
+      height: 300,
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      },
+    })
+    const splashPath = path.join(__dirname, '../resources/splash.html')
+    splashWindow.loadFile(splashPath).catch((err) => console.log('Splash load error:', err))
 
     mainWindow = createWindow('main', {
       width: 1200,
       height: 800,
       frame: false,          // Custom window chrome — Task Group 5
+      show: false,           // Start hidden until ready
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
       },
+    })
+
+    // Listen for main window being ready to show
+    mainWindow.once('ready-to-show', () => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close()
+      }
+      mainWindow?.show()
     })
 
     if (isProd) {
@@ -45,7 +70,7 @@ let mainWindow: BrowserWindow | null = null
     } else {
       const port = process.argv[2]
       await mainWindow.loadURL(`http://localhost:${port}/home`)
-      mainWindow.webContents.openDevTools()
+      // mainWindow.webContents.openDevTools()
     }
 
     ProcessService.setEventEmitter((channel, data) => {
@@ -136,6 +161,18 @@ ipcMain.handle('get-process-status', async (_event, projectId: string) => {
 
 ipcMain.handle('get-process-logs', async (_event, pid: number) => {
   return ProcessService.getLogsForPid(pid)
+})
+
+ipcMain.handle('send-process-input', async (_event, pid: number, input: string) => {
+  return ProcessService.sendInput(pid, input)
+})
+
+ipcMain.handle('start-interactive-shell', async (_event, projectId: string, cwd: string) => {
+  return ProcessService.startInteractiveShell(projectId, cwd)
+})
+
+ipcMain.handle('send-shell-input', async (_event, projectId: string, input: string) => {
+  return ProcessService.sendShellInput(projectId, input)
 })
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ export interface Project {
   detectedBy: string
   size?: number
   lastModified?: number
+  confidenceScore?: 'high' | 'medium' | 'low'
 }
 
 export type ProcessStatus = 'stopped' | 'running' | 'starting' | 'error'
@@ -157,6 +158,9 @@ export interface IpcHandlers {
   'stop-command': (projectId: string) => Promise<void>
   'get-process-status': (projectId: string) => Promise<ProcessState>
   'get-process-logs': (pid: number) => Promise<LogEntry[]>
+  'send-process-input': (pid: number, input: string) => Promise<void>
+  'start-interactive-shell': (projectId: string, cwd: string) => Promise<{ pid?: number, error?: SpawnError }>
+  'send-shell-input': (projectId: string, input: string) => Promise<void>
   'select-directory': () => Promise<string>
   'select-file': () => Promise<string>
   'get-settings': () => Promise<Settings>
@@ -204,7 +208,7 @@ export interface LogEntry {
   pid: number
   data: string
   timestamp: number
-  type: 'stdout' | 'stderr'
+  type: 'stdout' | 'stderr' | 'shell-stdout' | 'shell-stderr'
 }
 
 // ---------------------------------------------------------------------------

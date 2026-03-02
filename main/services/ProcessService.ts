@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'child_process'
+import { ChildProcess, spawn, spawnSync } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import pidusage from 'pidusage'
@@ -59,6 +59,11 @@ const processHandles = new Map<number, ChildProcess>()
  */
 const logBuffers = new Map<number, RingBuffer<LogEntry>>()
 
+/**
+ * Shell handles for interactive terminal, keyed by Project ID.
+ */
+const shellHandles = new Map<string, ChildProcess>()
+
 // ---------------------------------------------------------------------------
 // COMMAND_MAP
 // ---------------------------------------------------------------------------
@@ -83,6 +88,19 @@ export class ProcessService {
   private static eventEmitter: (channel: string, data: unknown) => void = () => { /* noop until set */ }
   private static monitoringInterval: NodeJS.Timeout | null = null
 
+  public static resolvePythonExecutable(): string {
+    const candidates = ['python', 'py', 'python3']
+    for (const candidate of candidates) {
+      try {
+        const result = spawnSync(candidate, ['--version'], { encoding: 'utf-8' })
+        if (result.status === 0) return candidate
+      } catch (e) {
+        // ignore
+      }
+    }
+    return 'python' // fallback
+  }
+
   // -------------------------------------------------------------------------
   // Initialisation
   // -------------------------------------------------------------------------
@@ -104,6 +122,9 @@ export class ProcessService {
       if (entry && entry.type !== 'unity') {
         this.stopCommand(entry.projectId)
       }
+    }
+    for (const [projectId, handle] of shellHandles.entries()) {
+      if (handle.pid) this.spawnKill(handle.pid)
     }
   }
 
@@ -260,11 +281,13 @@ export class ProcessService {
     pid: number,
     projectId: string,
     data: string,
-    type: 'stdout' | 'stderr',
+    type: 'stdout' | 'stderr' | 'shell-stdout' | 'shell-stderr',
   ): void {
     const entry: LogEntry = { projectId, pid, data, timestamp: Date.now(), type }
 
     // Store in ring buffer (bounded, main-process side)
+    // For shell logs, we might not want to buffer them using the same map keyed by pid, 
+    // but the split terminal just filters on `type`, so buffering is fine.
     this.ensureLogBuffer(pid).push(entry)
 
     // Forward to renderer
@@ -358,6 +381,14 @@ export class ProcessService {
       execPath = settings.unrealPath
       args = [path.join(cwd, uproject)]
       useShell = false
+    } else if (type === 'python') {
+      execPath = this.resolvePythonExecutable()
+      let entryPoint = 'main.py'
+      if (!fs.existsSync(path.join(cwd, 'main.py')) && fs.existsSync(path.join(cwd, 'app.py'))) {
+        entryPoint = 'app.py'
+      }
+      args = [entryPoint]
+      useShell = true
     } else {
       const fullCmd = COMMAND_MAP[type] || 'npm start'
       const parts = fullCmd.split(' ')
@@ -372,7 +403,8 @@ export class ProcessService {
     const spawnOptions: import('child_process').SpawnOptions = {
       cwd,
       shell: useShell,
-      stdio: type === 'unity' ? 'ignore' : ['ignore', 'pipe', 'pipe'],
+      stdio: type === 'unity' ? 'ignore' : ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
     }
     if (type === 'unity') {
       spawnOptions.detached = true
@@ -584,8 +616,80 @@ export class ProcessService {
   }
 
   // -------------------------------------------------------------------------
-  // Stop / Kill
+  // Stop / Kill / Input
   // -------------------------------------------------------------------------
+
+  public static sendInput(pid: number, input: string): void {
+    const child = processHandles.get(pid)
+    if (child && child.stdin) {
+      try {
+        child.stdin.write(input)
+      } catch (err) {
+        console.error(`[ProcessService] Failed to send input to PID ${pid}:`, err)
+      }
+    }
+  }
+
+  public static startInteractiveShell(projectId: string, cwd: string): { pid?: number, error?: SpawnError } {
+    if (shellHandles.has(projectId)) {
+      return { pid: shellHandles.get(projectId)?.pid }
+    }
+
+    const isWin = process.platform === 'win32'
+    const shellCommand = isWin ? 'cmd.exe' : 'bash'
+
+    try {
+      const child = spawn(shellCommand, [], {
+        cwd,
+        shell: true,
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+
+      if (child.pid === undefined) {
+        return { error: { code: 'SPAWN_FAILURE', message: 'Failed to spawn interactive shell', projectId } }
+      }
+
+      shellHandles.set(projectId, child)
+
+      // Ensure there's a log buffer (even if we use a fake PID for the shell if regular app isn't running)
+      // We use the same PID if app running, else shell PID
+      const associatedPid = projectIndex.get(projectId) || child.pid
+
+      child.stdout?.on('data', (data: Buffer) => {
+        this.emitLog(associatedPid, projectId, data.toString(), 'shell-stdout')
+      })
+
+      child.stderr?.on('data', (data: Buffer) => {
+        this.emitLog(associatedPid, projectId, data.toString(), 'shell-stderr')
+      })
+
+      child.on('exit', () => {
+        shellHandles.delete(projectId)
+      })
+
+      child.on('error', (err) => {
+        console.error(`[ProcessService] Shell error for ${projectId}:`, err)
+        shellHandles.delete(projectId)
+      })
+
+      // Send initial clear or welcome message logic could go here
+      return { pid: child.pid }
+    } catch (rawErr) {
+      const err = rawErr as NodeJS.ErrnoException
+      return { error: this.makeSpawnError(projectId, err) }
+    }
+  }
+
+  public static sendShellInput(projectId: string, input: string): void {
+    const shell = shellHandles.get(projectId)
+    if (shell && shell.stdin) {
+      try {
+        shell.stdin.write(input + `\n`)
+      } catch (err) {
+        console.error(`[ProcessService] Failed to send shell input for ${projectId}:`, err)
+      }
+    }
+  }
 
   public static stopCommand(projectId: string): void {
     const pid = projectIndex.get(projectId)
@@ -599,6 +703,12 @@ export class ProcessService {
 
     // Spawn taskkill — no exec()
     this.spawnKill(pid)
+
+    // Disconnect shell if we stop the main process, or we can choose to leave it running.
+    // Let's leave the shell running so users can still execute commands when app is stopped.
+    // However, if we wanted to kill it:
+    // const shell = shellHandles.get(projectId);
+    // if (shell && shell.pid) { this.spawnKill(shell.pid); shellHandles.delete(projectId); }
 
     // Emit stopped deterministically immediately to sync UI prior to async exit fire
     this.eventEmitter('process-state', { projectId, pid: null, status: 'stopped' })
