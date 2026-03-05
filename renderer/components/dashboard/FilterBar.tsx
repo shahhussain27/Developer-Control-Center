@@ -14,7 +14,7 @@ import { cn } from '../../lib/utils'
 // ---------------------------------------------------------------------------
 
 const PROJECT_TYPE_OPTIONS: ProjectType[] = [
-  'nextjs', 'react', 'nextron', 'electron', 'node', 'python', 'unity', 'unreal', 'generic',
+  'nextjs', 'react', 'nextron', 'electron', 'node', 'python', 'unity', 'unreal', 'react-native', 'flutter', 'generic',
 ]
 
 const RUNTIME_OPTIONS: Runtime[] = ['node', 'python', 'unity', 'unreal']

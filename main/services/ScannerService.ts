@@ -67,6 +67,11 @@ export class ScannerService {
   public static async scanDirectory(basePath: string): Promise<Project[]> {
     const projects: Project[] = []
 
+    // Guard: skip directories that no longer exist (e.g. deleted projects in registry)
+    if (!fs.existsSync(basePath)) {
+      return projects
+    }
+
     try {
       // Find indicators of projects up to depth 5
       // This is dramatically faster than manual fs traversal and doesn't block the UI thread
@@ -94,12 +99,52 @@ export class ScannerService {
         uniqueDirs.add(dir)
       }
 
+      const { ignoredProjects = [], projectAliases = {}, projectUsage = {} } = SettingsService.getSettings()
+      const ignoredSet = new Set(ignoredProjects)
+
       for (const dir of uniqueDirs) {
+        if (ignoredSet.has(dir)) continue
+
         const project = this.detectProject(dir)
         if (project) {
+          if (projectAliases[dir]) {
+            project.name = projectAliases[dir]
+          }
           projects.push(project)
         }
       }
+
+      // Cleanup step: Detect 'ghost' projects (directories that no longer exist)
+      let settingsChanged = false
+      const newAliases = { ...projectAliases }
+      const newUsage = { ...projectUsage }
+      const newIgnored = new Set(ignoredProjects)
+
+      // Clean aliases
+      for (const aliasPath of Object.keys(newAliases)) {
+        if (!fs.existsSync(aliasPath)) {
+          delete newAliases[aliasPath]
+          settingsChanged = true
+        }
+      }
+
+      // Cleanup usages (requires finding project id matches... actually usages uses ID, not path.)
+      // It's safer to just cleanup aliases and ignored paths that act as memory leaks.
+      for (const ignoredPath of Array.from(newIgnored)) {
+        if (!fs.existsSync(ignoredPath)) {
+          newIgnored.delete(ignoredPath)
+          settingsChanged = true
+        }
+      }
+
+      if (settingsChanged) {
+        SettingsService.saveSettings({
+          ...SettingsService.getSettings(),
+          projectAliases: newAliases,
+          ignoredProjects: Array.from(newIgnored)
+        })
+      }
+
     } catch (e) {
       console.error(`Error scanning directory ${basePath}:`, e)
     }
@@ -163,8 +208,24 @@ export class ScannerService {
         } else if (deps['next']) {
           projectType = 'nextjs'
           confidenceScore = 'high'
+        } else if (deps['react-native']) {
+          const hasAndroid = fs.existsSync(path.join(projectPath, 'android'))
+          const hasIos = fs.existsSync(path.join(projectPath, 'ios'))
+          if (hasAndroid || hasIos) {
+            projectType = 'react-native'
+            detectedBy = 'react-native dependencies and folders'
+            confidenceScore = 'high'
+          } else {
+            projectType = 'react' // Fallback
+            confidenceScore = 'medium'
+          }
         } else if (deps['react']) {
           projectType = 'react'
+          confidenceScore = 'medium'
+        } else if (deps['express'] || deps['fastify'] || deps['koa'] || deps['hapi']) {
+          // Explicitly-tagged backend Node frameworks \u2014 medium confidence even without src/ or scripts
+          projectType = 'node'
+          detectedBy = 'package.json (node framework)'
           confidenceScore = 'medium'
         }
 
@@ -210,6 +271,19 @@ export class ScannerService {
       const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'python', runtime: 'python', detectedBy: 'python indicators', lastModified, confidenceScore: 'high' }
       triggerSizeCalculation(project)
       return project
+    }
+
+    // Flutter
+    if (fs.existsSync(path.join(projectPath, 'pubspec.yaml')) &&
+      fs.existsSync(path.join(projectPath, 'lib'))) {
+      const hasAndroid = fs.existsSync(path.join(projectPath, 'android'))
+      const hasIos = fs.existsSync(path.join(projectPath, 'ios'))
+      const hasWeb = fs.existsSync(path.join(projectPath, 'web'))
+      if (hasAndroid || hasIos || hasWeb) {
+        const project: Project = { id: uuidv4(), name, path: projectPath, projectType: 'flutter', runtime: 'flutter', detectedBy: 'pubspec.yaml', lastModified, confidenceScore: 'high' }
+        triggerSizeCalculation(project)
+        return project
+      }
     }
 
     // Unity

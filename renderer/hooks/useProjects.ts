@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Project,
   ProcessState,
@@ -12,6 +12,15 @@ import {
 /** Maximum log entries kept in renderer state (per project). */
 const RENDERER_LOG_CAP = 500
 
+/** Returns a deduped array of projects keeping the last entry for each unique path. */
+const dedupByPath = (projects: Project[]): Project[] => {
+  const map = new Map<string, Project>()
+  for (const p of projects) {
+    map.set(p.path, p)
+  }
+  return Array.from(map.values())
+}
+
 export const useProjects = () => {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
@@ -20,6 +29,7 @@ export const useProjects = () => {
   const [processStats, setProcessStats] = useState<Record<string, ProcessStats>>({})
   const [settings, setSettings] = useState<Settings>({ scanLocations: [] })
   const [lastError, setLastError] = useState<SpawnError | null>(null)
+  const isSelectingPath = useRef(false)
 
   // ---------------------------------------------------------------------------
   // Boot: load settings + auto-scan saved locations
@@ -29,14 +39,15 @@ export const useProjects = () => {
       const s = await window.ipc.getSettings()
       setSettings(s)
 
+      // Accumulate all projects across all locations in one pass, then dedup by path.
+      // This avoids incremental setState merges that can produce duplicates when
+      // the same project folder is a sub-path of multiple scan locations.
+      const allDetected: Project[] = []
       for (const loc of s.scanLocations) {
         const detected = await window.ipc.scanDirectory(loc)
-        setProjects(prev => {
-          const existingPaths = new Set(prev.map((p: Project) => p.path))
-          const newProjects = detected.filter((p: Project) => !existingPaths.has(p.path))
-          return newProjects.length > 0 ? [...prev, ...newProjects] : prev
-        })
+        allDetected.push(...detected)
       }
+      setProjects(dedupByPath(allDetected))
     }
 
     loadInitialData()
@@ -101,19 +112,46 @@ export const useProjects = () => {
   // ---------------------------------------------------------------------------
 
   const scan = useCallback(async () => {
-    const dir = await window.ipc.selectDirectory()
-    if (!dir) return
-
-    setLoading(true)
+    if (isSelectingPath.current) return
+    isSelectingPath.current = true
     try {
-      const detected = await window.ipc.scanDirectory(dir)
-      setProjects((prev: Project[]) => {
-        const existingPaths = new Set(prev.map((p: Project) => p.path))
-        const newProjects = detected.filter((p: Project) => !existingPaths.has(p.path))
-        return newProjects.length > 0 ? [...prev, ...newProjects] : prev
-      })
+      const dir = await window.ipc.selectDirectory()
+      if (!dir) return
+
+      setLoading(true)
+      try {
+        const s = await window.ipc.getSettings()
+        const newScanLocs = Array.from(new Set([...s.scanLocations, dir]))
+        s.scanLocations = newScanLocs
+        await window.ipc.saveSettings(s)
+        setSettings(s)
+
+        let allDetected: Project[] = []
+        for (const loc of newScanLocs) {
+          const detected = await window.ipc.scanDirectory(loc)
+          allDetected = [...allDetected, ...detected]
+        }
+        setProjects(allDetected)
+      } finally {
+        setLoading(false)
+      }
     } finally {
-      setLoading(false)
+      isSelectingPath.current = false
+    }
+  }, [])
+
+  const refreshLocations = useCallback(async () => {
+    try {
+      const s = await window.ipc.getSettings()
+      setSettings(s)
+      const allDetected: Project[] = []
+      for (const loc of s.scanLocations) {
+        const detected = await window.ipc.scanDirectory(loc)
+        allDetected.push(...detected)
+      }
+      setProjects(dedupByPath(allDetected))
+    } catch (e) {
+      console.error('Failed to silently refresh project locations:', e)
     }
   }, [])
 
@@ -215,6 +253,7 @@ export const useProjects = () => {
     settings,
     setSettings,
     scan,
+    refreshLocations,
     runCommand,
     stopCommand,
     refreshStatus,

@@ -137,6 +137,61 @@ ipcMain.handle('scan-directory', async (_event, dirPath: string) => {
   return await ScannerService.scanDirectory(dirPath)
 })
 
+import { EnvironmentService } from './services/EnvironmentService'
+import { CreationService } from './services/CreationService'
+
+// ---------------------------------------------------------------------------
+// Environment Checking
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('check-environment', async () => {
+  return EnvironmentService.checkAll()
+})
+
+// ---------------------------------------------------------------------------
+// Project Creation
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('create-project', async (_event, type: ProjectType, name: string, directory: string) => {
+  return CreationService.createProject(type, name, directory, (data) => {
+    CreationService.emitCreationLog(data)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Project Lifecycle
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('ignore-project', async (_event, pathStr: string) => {
+  // Remove from scan registry first (prevents it re-appearing on next rescan)
+  SettingsService.removeLocation(pathStr)
+  // Mark as ignored (in case the folder is ever re-added as a sub-path)
+  SettingsService.ignoreProject(pathStr)
+})
+
+ipcMain.handle('rename-project', async (_event, pathStr: string, newName: string) => {
+  SettingsService.setProjectAlias(pathStr, newName)
+})
+
+import * as fs from 'fs'
+
+ipcMain.handle('delete-project-permanent', async (_event, pathStr: string) => {
+  try {
+    fs.rmSync(pathStr, { recursive: true, force: true })
+
+    // Remove from scan registry (if the project path itself was added as a scan location)
+    SettingsService.removeLocation(pathStr)
+
+    // Also ignore it so it won't re-appear if the folder is ever recreated
+    SettingsService.ignoreProject(pathStr)
+
+    // Clear any stored alias for this path
+    SettingsService.setProjectAlias(pathStr, '')
+  } catch (err: any) {
+    throw new Error(`Failed to delete project: ${err.message}`)
+  }
+})
+
 // ---------------------------------------------------------------------------
 // Process Management
 // ---------------------------------------------------------------------------

@@ -103,7 +103,7 @@ export class BuildProfileService {
             // By using our unified ProcessService.runRawCommand, the build inherently stream logs to the frontend via the `process-log` IPC, 
             // registers in the pid table, and displays in the regular UI log viewer deterministically.
             console.log(`[BuildProfileService] Executing build: ${execPath} ${args.join(' ')}`)
-            const res = ProcessService.runRawCommand(project.id, `"${execPath}"`, args, project.path)
+            const res = ProcessService.runRawCommand(project.id, execPath, args, project.path)
             if ('error' in res) {
                 return { error: res.error }
             }

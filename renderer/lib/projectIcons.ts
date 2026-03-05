@@ -1,24 +1,20 @@
 import React from 'react'
 import {
   Box,
-  Atom,
-  Server,
-  Gamepad2,
-  Brain,
-  Cpu,
   Zap,
   Package,
 } from 'lucide-react'
 import { ProjectType } from '../../common/types'
 
 // Custom SVG icons — processed by @svgr/webpack into React components
-import NextjsIcon   from '../public/icons/nextjs.svg'
-import ReactIcon    from '../public/icons/reactjs.svg'
+import NextjsIcon from '../public/icons/nextjs.svg'
+import ReactIcon from '../public/icons/reactjs.svg'
 import ElectronIcon from '../public/icons/electronjs.svg'
-import NodeIcon     from '../public/icons/nodejs.svg'
-import PythonIcon   from '../public/icons/python.svg'
-import UnityIcon    from '../public/icons/unity.svg'
-import UnrealIcon   from '../public/icons/unreal.svg'
+import NodeIcon from '../public/icons/nodejs.svg'
+import PythonIcon from '../public/icons/python.svg'
+import UnityIcon from '../public/icons/unity.svg'
+import UnrealIcon from '../public/icons/unreal.svg'
+import FlutterIcon from '../public/icons/flutter.svg'
 
 /**
  * The shared icon type accepted by ProjectTypeIcon.
@@ -43,15 +39,17 @@ export type ProjectIcon = React.ComponentType<React.SVGProps<SVGSVGElement>>
  *   above, and replace the corresponding Lucide fallback here.
  */
 export const PROJECT_TYPE_ICONS: Record<ProjectType, ProjectIcon> = {
-  nextjs:   NextjsIcon,
-  react:    ReactIcon,
-  nextron:  Zap,
+  nextjs: NextjsIcon,
+  react: ReactIcon,
+  nextron: Zap,
   electron: ElectronIcon,
-  node:     NodeIcon,
-  python:   PythonIcon,
-  unity:    UnityIcon,
-  unreal:   UnrealIcon,
-  generic:  Package,
+  node: NodeIcon,
+  python: PythonIcon,
+  unity: UnityIcon,
+  unreal: UnrealIcon,
+  generic: Package,
+  'react-native': ReactIcon,
+  flutter: FlutterIcon,
 }
 
 /**
@@ -59,15 +57,17 @@ export const PROJECT_TYPE_ICONS: Record<ProjectType, ProjectIcon> = {
  * Used in filter dropdowns and tooltips.
  */
 export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
-  nextjs:   'Next.js',
-  react:    'React',
-  nextron:  'Nextron',
+  nextjs: 'Next.js',
+  react: 'React',
+  nextron: 'Nextron',
   electron: 'Electron',
-  node:     'Node.js',
-  python:   'Python',
-  unity:    'Unity',
-  unreal:   'Unreal Engine',
-  generic:  'Generic',
+  node: 'Node.js',
+  python: 'Python',
+  unity: 'Unity',
+  unreal: 'Unreal Engine',
+  generic: 'Generic',
+  'react-native': 'React Native',
+  flutter: 'Flutter',
 }
 
 /**
@@ -75,30 +75,34 @@ export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
  * Restricted to Tailwind colour classes so they are tree-shaken correctly.
  */
 export const PROJECT_TYPE_COLORS: Record<ProjectType, string> = {
-  nextjs:   'text-white',
-  react:    'text-cyan-400',
-  nextron:  'text-violet-400',
+  nextjs: 'text-white',
+  react: 'text-cyan-400',
+  nextron: 'text-violet-400',
   electron: 'text-sky-400',
-  node:     'text-green-400',
-  python:   'text-yellow-400',
-  unity:    'text-orange-400',
-  unreal:   'text-red-400',
-  generic:  'text-white/50',
+  node: 'text-green-400',
+  python: 'text-yellow-400',
+  unity: 'text-orange-400',
+  unreal: 'text-red-400',
+  generic: 'text-white/50',
+  'react-native': 'text-cyan-500',
+  flutter: 'text-sky-300',
 }
 
 /**
  * Background tint applied to the icon badge per project type.
  */
 export const PROJECT_TYPE_BG: Record<ProjectType, string> = {
-  nextjs:   'bg-white/10',
-  react:    'bg-cyan-400/10',
-  nextron:  'bg-violet-400/10',
+  nextjs: 'bg-white/10',
+  react: 'bg-cyan-400/10',
+  nextron: 'bg-violet-400/10',
   electron: 'bg-sky-400/10',
-  node:     'bg-green-400/10',
-  python:   'bg-yellow-400/10',
-  unity:    'bg-orange-400/10',
-  unreal:   'bg-red-400/10',
-  generic:  'bg-white/5',
+  node: 'bg-green-400/10',
+  python: 'bg-yellow-400/10',
+  unity: 'bg-orange-400/10',
+  unreal: 'bg-red-400/10',
+  generic: 'bg-white/5',
+  'react-native': 'bg-cyan-500/10',
+  flutter: 'bg-sky-300/10',
 }
 
 /** Fallback for unknown / future types. */

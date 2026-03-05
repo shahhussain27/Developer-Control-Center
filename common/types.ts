@@ -1,5 +1,5 @@
-export type ProjectType = 'nextjs' | 'react' | 'node' | 'unity' | 'python' | 'unreal' | 'generic' | 'electron' | 'nextron'
-export type Runtime = 'node' | 'unity' | 'python' | 'unreal'
+export type ProjectType = 'nextjs' | 'react' | 'node' | 'unity' | 'python' | 'unreal' | 'generic' | 'electron' | 'nextron' | 'react-native' | 'flutter'
+export type Runtime = 'node' | 'unity' | 'python' | 'unreal' | 'flutter'
 
 export type CheckStatus = 'OK' | 'WARNING' | 'ERROR'
 
@@ -94,6 +94,8 @@ export interface Settings {
   unrealPath?: string
   customIdes?: IdeInfo[]
   projectUsage?: Record<string, number>
+  ignoredProjects?: string[]
+  projectAliases?: Record<string, string>
 }
 
 export interface StartupCommand {
@@ -101,12 +103,15 @@ export interface StartupCommand {
   command: string
   args: string[]
   cwd?: string
+  delayMs?: number  // Delay in ms before executing this step
+  label?: string    // Human-readable step label
 }
 
 export interface StartupProfile {
   id: string
   projectId: string
   name: string
+  description?: string  // What this profile does
   commands: StartupCommand[]
 }
 
@@ -137,6 +142,15 @@ export interface CleanupResult {
 // ---------------------------------------------------------------------------
 // Network
 // ---------------------------------------------------------------------------
+
+export type EnvironmentStatus = 'installed' | 'outdated' | 'missing'
+
+export interface EnvironmentCheckResult {
+  tool: string
+  status: EnvironmentStatus
+  version?: string
+  message?: string
+}
 
 export interface PortInfo {
   port: number
@@ -179,9 +193,18 @@ export interface IpcHandlers {
   'delete-build-profile': (profileId: string) => Promise<void>
   'run-build-profile': (profileId: string) => Promise<void | { error: SpawnError }>
 
+  // Project Creation
+  'create-project': (type: ProjectType, name: string, directory: string) => Promise<string>
+
   // Engine Diagnostics & Cleanup
   'detect-engine-version': (projectId: string) => Promise<EngineDetectionResult>
+  'check-environment': () => Promise<EnvironmentCheckResult[]>
   'clean-project': (projectId: string) => Promise<CleanupResult>
+
+  // Project Lifecycle Management
+  'ignore-project': (path: string) => Promise<void>
+  'rename-project': (path: string, newName: string) => Promise<void>
+  'delete-project-permanent': (path: string) => Promise<void>
 
   // Port Handlers
   'get-active-ports': () => Promise<PortInfo[]>

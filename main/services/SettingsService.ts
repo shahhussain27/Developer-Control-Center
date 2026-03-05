@@ -30,6 +30,15 @@ const schema: any = {
   projectUsage: {
     type: 'object',
     default: {}
+  },
+  ignoredProjects: {
+    type: 'array',
+    items: { type: 'string' },
+    default: []
+  },
+  projectAliases: {
+    type: 'object',
+    default: {}
   }
 }
 
@@ -42,7 +51,9 @@ export class SettingsService {
       unityPath: this.store.get('unityPath') as string,
       unrealPath: this.store.get('unrealPath') as string,
       customIdes: this.store.get('customIdes') as any[] || [],
-      projectUsage: this.store.get('projectUsage') as Record<string, number> || {}
+      projectUsage: this.store.get('projectUsage') as Record<string, number> || {},
+      ignoredProjects: this.store.get('ignoredProjects') as string[] || [],
+      projectAliases: this.store.get('projectAliases') as Record<string, string> || {}
     }
   }
 
@@ -52,6 +63,8 @@ export class SettingsService {
     this.store.set('unrealPath', settings.unrealPath || '')
     this.store.set('customIdes', settings.customIdes || [])
     this.store.set('projectUsage', settings.projectUsage || {})
+    this.store.set('ignoredProjects', settings.ignoredProjects || [])
+    this.store.set('projectAliases', settings.projectAliases || {})
   }
 
   public static incrementProjectUsage(projectId: string): void {
@@ -61,17 +74,36 @@ export class SettingsService {
     this.saveSettings({ ...settings, projectUsage: usage })
   }
 
-  public static addLocation(path: string): void {
-    const locations = this.getSettings().scanLocations
-    if (!locations.includes(path)) {
-      this.saveSettings({ scanLocations: [...locations, path] })
+  public static ignoreProject(path: string): void {
+    const settings = this.getSettings()
+    const ignored = new Set(settings.ignoredProjects || [])
+    ignored.add(path)
+    this.saveSettings({ ...settings, ignoredProjects: Array.from(ignored) })
+  }
+
+  public static setProjectAlias(path: string, alias: string): void {
+    const settings = this.getSettings()
+    const aliases = { ...(settings.projectAliases || {}) }
+    if (alias.trim() === '') {
+      delete aliases[path] // Remove alias if empty
+    } else {
+      aliases[path] = alias
+    }
+    this.saveSettings({ ...settings, projectAliases: aliases })
+  }
+
+  public static addLocation(locationPath: string): void {
+    const settings = this.getSettings()
+    if (!settings.scanLocations.includes(locationPath)) {
+      this.saveSettings({ ...settings, scanLocations: [...settings.scanLocations, locationPath] })
     }
   }
 
-  public static removeLocation(path: string): void {
-    const locations = this.getSettings().scanLocations
+  public static removeLocation(locationPath: string): void {
+    const settings = this.getSettings()
     this.saveSettings({
-      scanLocations: locations.filter(loc => loc !== path)
+      ...settings,
+      scanLocations: settings.scanLocations.filter(loc => loc !== locationPath)
     })
   }
 }

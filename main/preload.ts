@@ -17,6 +17,7 @@ import {
   BuildProfile,
   EngineDetectionResult,
   CleanupResult,
+  EnvironmentCheckResult,
 } from '../common/types'
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,24 @@ const handler = {
     return () => ipcRenderer.removeListener('project-updated', subscription)
   },
 
+  // ----- Project Creation --------------------------------------------------
+  createProject: (type: ProjectType, name: string, directory: string): Promise<string> =>
+    ipcRenderer.invoke('create-project', type, name, directory),
+
+  onCreationLog: (callback: (log: string) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, log: string) => callback(log)
+    ipcRenderer.on('creation-log', subscription)
+    return () => ipcRenderer.removeListener('creation-log', subscription)
+  },
+
+  // ----- Project Lifecycle -------------------------------------------------
+  ignoreProject: (path: string): Promise<void> =>
+    ipcRenderer.invoke('ignore-project', path),
+  renameProject: (path: string, newName: string): Promise<void> =>
+    ipcRenderer.invoke('rename-project', path, newName),
+  deleteProjectPermanent: (path: string): Promise<void> =>
+    ipcRenderer.invoke('delete-project-permanent', path),
+
   // ----- Startup Profiles --------------------------------------------------
   getProfiles: (projectId: string): Promise<StartupProfile[]> =>
     ipcRenderer.invoke('get-profiles', projectId),
@@ -146,6 +165,8 @@ const handler = {
   // ----- Engine Diagnostics & Cleanup --------------------------------------
   detectEngineVersion: (projectId: string): Promise<EngineDetectionResult> =>
     ipcRenderer.invoke('detect-engine-version', projectId),
+  checkEnvironment: (): Promise<EnvironmentCheckResult[]> =>
+    ipcRenderer.invoke('check-environment'),
   cleanProject: (projectId: string): Promise<CleanupResult> =>
     ipcRenderer.invoke('clean-project', projectId),
 

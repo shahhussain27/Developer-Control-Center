@@ -12,15 +12,18 @@ const schema: any = {
         id: { type: 'string' },
         projectId: { type: 'string' },
         name: { type: 'string' },
+        description: { type: 'string', default: '' },
         commands: {
           type: 'array',
           items: {
             type: 'object',
             properties: {
               id: { type: 'string' },
+              label: { type: 'string', default: '' },
               command: { type: 'string' },
               args: { type: 'array', items: { type: 'string' } },
-              cwd: { type: 'string' }
+              cwd: { type: 'string' },
+              delayMs: { type: 'number', default: 0 }
             }
           }
         }
@@ -66,14 +69,22 @@ export class ProfileService {
 
     this.runningProfiles.set(profileId, true)
 
+    const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
     try {
       for (const cmd of profile.commands) {
         if (!this.runningProfiles.get(profileId)) {
           console.log(`[ProfileService] Profile ${profile.name} stopped manually.`)
           break
         }
-        
-        console.log(`[ProfileService] Running command: ${cmd.command} ${cmd.args.join(' ')}`)
+
+        // Optional delay before this step
+        if (cmd.delayMs && cmd.delayMs > 0) {
+          console.log(`[ProfileService] Waiting ${cmd.delayMs}ms before step: ${cmd.label || cmd.command}`)
+          await sleep(cmd.delayMs)
+        }
+
+        console.log(`[ProfileService] Running step: ${cmd.label || cmd.command} ${cmd.args.join(' ')}`)
         await ProcessService.runRawCommandAsync(profile.projectId, cmd.command, cmd.args, cmd.cwd || '.')
       }
     } catch (error) {

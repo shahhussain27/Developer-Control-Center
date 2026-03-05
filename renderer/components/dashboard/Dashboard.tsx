@@ -1,30 +1,30 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useProjects } from '../../hooks/useProjects'
 import { ProjectCard } from './ProjectCard'
 import { FilterBar } from './FilterBar'
 import { Button } from '../ui/button'
 import { ScrollArea } from '../ui/scroll-area'
-import { PlusCircle, RefreshCw } from 'lucide-react'
+import { PlusCircle, RefreshCw, Folder } from 'lucide-react'
 import { Sidebar, ViewType } from '../layout/Sidebar'
 import { WindowControls } from '../layout/WindowControls'
 import { NetworkView } from '../network/NetworkView'
 import { SettingsView } from '../settings/SettingsView'
 import { ResourcesView } from '../resources/ResourcesView'
 import { PortConflictView } from '@/components/network/PortConflictView'
-import { Project } from '../../../common/types'
+import { CreateProjectWizard } from '../wizard/CreateProjectWizard'
 import { ProjectFilters, DEFAULT_FILTERS } from '../../lib/filterTypes'
 import { applyFilters } from '../../lib/projectFilters'
 
 export const Dashboard: React.FC = () => {
   const {
     projects,
-    setProjects,
     loading,
     processStates,
     logs,
     settings,
     setSettings,
     scan,
+    refreshLocations,
     runCommand,
     stopCommand,
     processStats,
@@ -35,6 +35,15 @@ export const Dashboard: React.FC = () => {
   const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_FILTERS)
   const [filterExpanded, setFilterExpanded] = useState(false)
   const [sortMode, setSortMode] = useState<'lastModified' | 'mostUsed'>('lastModified')
+  const [showWizard, setShowWizard] = useState(false)
+
+  // Auto-refresh when the window Regains focus.
+  // This smoothly culls projects deleted externally from Explorer.
+  useEffect(() => {
+    const handleFocus = () => refreshLocations()
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [refreshLocations])
 
   // Pure, no-mutation application of filter state
   const baseFiltered = applyFilters(projects, filters, processStates)
@@ -84,16 +93,11 @@ export const Dashboard: React.FC = () => {
             onAddLocation={async () => {
               const dirPath = await window.ipc.selectDirectory()
               if (dirPath) {
-                const newSettings = { ...settings, scanLocations: [...settings.scanLocations, dirPath] }
+                const newSettings = { ...settings, scanLocations: Array.from(new Set([...settings.scanLocations, dirPath])) }
                 setSettings(newSettings)
                 await window.ipc.saveSettings(newSettings)
-
-                const detected = await window.ipc.scanDirectory(dirPath)
-                setProjects((prev: Project[]) => {
-                  const existingPaths = new Set(prev.map((p: Project) => p.path))
-                  const newProjects = detected.filter((p: Project) => !existingPaths.has(p.path))
-                  return newProjects.length > 0 ? [...prev, ...newProjects] : prev
-                })
+                // Rescan all locations from scratch for a clean, deduped list
+                await refreshLocations()
               }
             }}
           />
@@ -155,6 +159,7 @@ export const Dashboard: React.FC = () => {
                       onRun={runCommand}
                       onStop={stopCommand}
                       onRunProfile={runProfile}
+                      onRefresh={refreshLocations}
                     />
                   ))}
                 </div>
@@ -194,14 +199,24 @@ export const Dashboard: React.FC = () => {
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
             {currentView === 'projects' && (
-              <Button
-                onClick={scan}
-                disabled={loading}
-                className="h-11 px-6 rounded-xl gap-2 font-bold shadow-lg shadow-primary/10 transition-transform active:scale-95"
-              >
-                <PlusCircle className="w-5 h-5 font-bold" />
-                IMPORT
-              </Button>
+              <>
+                <Button
+                  onClick={() => setShowWizard(true)}
+                  disabled={loading}
+                  className="h-11 px-6 bg-green-600 hover:bg-green-700 rounded-xl gap-2 font-bold shadow-lg shadow-green-600/20 transition-transform active:scale-95"
+                >
+                  <PlusCircle className="w-5 h-5 font-bold" />
+                  NEW
+                </Button>
+                <Button
+                  onClick={scan}
+                  disabled={loading}
+                  className="h-11 px-6 rounded-xl gap-2 font-bold shadow-lg shadow-primary/10 transition-transform active:scale-95"
+                >
+                  <Folder className="w-5 h-5 font-bold" />
+                  IMPORT
+                </Button>
+              </>
             )}
             <Button
               variant="outline"
@@ -240,6 +255,22 @@ export const Dashboard: React.FC = () => {
           </div>
         </footer>
       </div>
+
+      <CreateProjectWizard
+        isOpen={showWizard}
+        onClose={() => setShowWizard(false)}
+        onCreated={async (newPath) => {
+          // Save the new location to settings so it persists
+          const newSettings = { ...settings, scanLocations: Array.from(new Set([...settings.scanLocations, newPath])) }
+          setSettings(newSettings)
+          await window.ipc.saveSettings(newSettings)
+
+          // Use refreshLocations as the single source of truth —
+          // this avoids duplicates from patching state and then rescanning the same path.
+          await refreshLocations()
+          setShowWizard(false)
+        }}
+      />
     </div>
   )
 }

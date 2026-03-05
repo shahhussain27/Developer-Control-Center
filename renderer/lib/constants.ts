@@ -9,5 +9,7 @@ export const DEFAULT_ACTIONS_BY_PROJECT_TYPE: Record<ProjectType, string[]> = {
     unreal: ['start_project', 'open_folder', 'clean_project'],
     electron: ['start_project', 'stop_project', 'view_logs', 'open_folder', 'open_ide'],
     nextron: ['start_project', 'stop_project', 'view_logs', 'open_folder', 'open_ide'],
+    'react-native': ['start_project', 'stop_project', 'view_logs', 'open_folder', 'open_ide'],
+    flutter: ['start_project', 'stop_project', 'view_logs', 'open_folder', 'open_ide'],
     generic: ['start_project', 'stop_project', 'open_folder']
 }

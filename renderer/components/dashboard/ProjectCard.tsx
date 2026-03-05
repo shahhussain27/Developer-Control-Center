@@ -2,7 +2,7 @@ import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { Folder, Activity, Play, Square, ExternalLink, RefreshCw, Code, AlertCircle, Code2, Globe, Box, TerminalSquare, AppWindow, MoreVertical, Terminal, Copy, Globe as GlobeIcon, FileText, AlertTriangle, FolderOpen, Trash2 } from 'lucide-react'
+import { Folder, Activity, Play, Square, RefreshCw, Code, AlertCircle, AppWindow, MoreVertical, Terminal, Copy, Globe as GlobeIcon, FileText, AlertTriangle, FolderOpen, Trash2 } from 'lucide-react'
 import { Project, ProcessState, IdeInfo, QuickAction } from '../../../common/types'
 import { DEFAULT_ACTIONS_BY_PROJECT_TYPE } from '../../lib/constants'
 import { cn } from '../../lib/utils'
@@ -19,6 +19,7 @@ interface ProjectCardProps {
   onRun: (projectId: string, command: string, cwd: string, type: string) => void
   onStop: (projectId: string) => void
   onRunProfile: (profileId: string, projectId: string) => void
+  onRefresh: () => void
 }
 
 const formatSize = (bytes?: number) => {
@@ -35,7 +36,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   processState,
   onRun,
   onStop,
-  onRunProfile
+  onRunProfile,
+  onRefresh
 }) => {
   const [ides, setIdes] = React.useState<IdeInfo[]>([])
   const [quickActions, setQuickActions] = React.useState<QuickAction[]>([])
@@ -45,6 +47,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [engineVersionMismatch, setEngineVersionMismatch] = React.useState<boolean>(false)
   const [isCleanupDialogOpen, setIsCleanupDialogOpen] = React.useState(false)
+
+  // Inline modal states (replaces window.prompt / window.confirm)
+  const [renameDialogOpen, setRenameDialogOpen] = React.useState(false)
+  const [renameValue, setRenameValue] = React.useState('')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false)
+  const [deleteMode, setDeleteMode] = React.useState<'hide' | 'permanent'>('hide')
 
   const isRunning = processState.status === 'running'
   const isStarting = processState.status === 'starting'
@@ -161,6 +169,53 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       }
     } catch (e: any) {
       setActionError(`Build Error: ${e.message}`)
+    }
+  }
+
+  const handleRename = () => {
+    setIsQuickActionsMenuOpen(false)
+    setRenameValue(project.name)
+    setRenameDialogOpen(true)
+  }
+
+  const confirmRename = async () => {
+    const trimmed = renameValue.trim()
+    if (trimmed && trimmed !== project.name) {
+      await window.ipc.renameProject(project.path, trimmed)
+      onRefresh()
+    }
+    setRenameDialogOpen(false)
+  }
+
+  const handleSafeRemove = () => {
+    setIsQuickActionsMenuOpen(false)
+    setDeleteMode('hide')
+    setDeleteConfirmOpen(true)
+  }
+
+  const handleDeletePermanent = () => {
+    setIsQuickActionsMenuOpen(false)
+    if (isRunning || isStarting) {
+      setActionError('Cannot delete a running or starting project.')
+      setTimeout(() => setActionError(null), 5000)
+      return
+    }
+    setDeleteMode('permanent')
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    setDeleteConfirmOpen(false)
+    try {
+      if (deleteMode === 'hide') {
+        await window.ipc.ignoreProject(project.path)
+      } else {
+        await window.ipc.deleteProjectPermanent(project.path)
+      }
+      onRefresh()
+    } catch (e: any) {
+      setActionError(e.message)
+      setTimeout(() => setActionError(null), 5000)
     }
   }
 
@@ -375,6 +430,31 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                     <span className="truncate">{action.label}</span>
                   </button>
                 ))}
+
+                <div className="px-3 py-2 border-y border-white/5 bg-white/5 mt-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Lifecycle</span>
+                </div>
+                <button
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 rounded-lg transition-colors text-left font-medium"
+                  onClick={handleRename}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="truncate">Rename (Alias)</span>
+                </button>
+                <button
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition-colors text-left font-medium"
+                  onClick={handleSafeRemove}
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  <span className="truncate">Safe Remove (Hide)</span>
+                </button>
+                <button
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors text-left font-medium"
+                  onClick={handleDeletePermanent}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="truncate">Permanent Delete</span>
+                </button>
               </div>
             </div>
           )}
@@ -403,6 +483,68 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           isOpen={isCleanupDialogOpen}
           onOpenChange={setIsCleanupDialogOpen}
         />
+      )}
+
+      {/* Rename Alias Dialog */}
+      {renameDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setRenameDialogOpen(false)}>
+          <div className="bg-[#111] border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 fade-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5 text-primary" />
+              <h3 className="text-base font-bold">Rename Project Alias</h3>
+            </div>
+            <p className="text-xs text-white/50">This sets a display alias for <span className="font-mono text-white/80">{project.name}</span>. The folder on disk is not renamed.</p>
+            <input
+              autoFocus
+              type="text"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') confirmRename(); if (e.key === 'Escape') setRenameDialogOpen(false) }}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="border-white/10" onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={confirmRename} disabled={!renameValue.trim()}>Save Alias</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete / Hide Confirmation Dialog */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDeleteConfirmOpen(false)}>
+          <div className="bg-[#111] border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 fade-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              {deleteMode === 'permanent'
+                ? <Trash2 className="w-5 h-5 text-red-500" />
+                : <AlertTriangle className="w-5 h-5 text-yellow-400" />
+              }
+              <h3 className="text-base font-bold">
+                {deleteMode === 'permanent' ? 'Permanently Delete Project?' : 'Hide Project from Dashboard?'}
+              </h3>
+            </div>
+            {deleteMode === 'permanent' ? (
+              <p className="text-xs text-red-300/80">
+                <span className="font-bold text-red-400">⚠ WARNING:</span> This will permanently delete <span className="font-mono text-white/80">{project.name}</span> from your disk. This action <span className="font-bold">cannot be undone</span>.
+              </p>
+            ) : (
+              <p className="text-xs text-white/50">
+                <span className="font-mono text-white/80">{project.name}</span> will be hidden from this dashboard. The files on disk are not affected.
+              </p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="border-white/10" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                variant={deleteMode === 'permanent' ? 'destructive' : 'default'}
+                className={deleteMode === 'hide' ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/50' : ''}
+                onClick={confirmDelete}
+              >
+                {deleteMode === 'permanent' ? 'Delete Forever' : 'Hide Project'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </Card>
   )
